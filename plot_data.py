@@ -102,7 +102,7 @@ class plot_data:
     output: accuracy bar plot
     '''
     def plot_accuracy(self, hormones,models):
-       fig, axs = plt.subplots(len(hormones), len(models), figsize=(20, 40)) 
+       fig, axs = plt.subplots(len(hormones), len(models), figsize=(20, 60)) 
        i = 0
        for h in hormones:
             j = 0
@@ -230,7 +230,7 @@ class plot_data:
     output: prob histogram two distribution random and exactly of accuracy
     ''' 
     def plot_boot_histograms(self, hormones,models):
-       fig, axs = plt.subplots(len(hormones), len(models), figsize=(5, 15)) 
+       fig, axs = plt.subplots(len(hormones), len(models), figsize=(20, 60)) 
       
        i = 0
        for h in hormones:
@@ -253,18 +253,18 @@ class plot_data:
                 
                 # Create a DataFrame
                 df = pd.DataFrame({'Category': combined_list_labels, 'Value': combined_list_data} )
-                sns.histplot(data = df ,x='Value', hue='Category', bins=50, kde=True, palette={'true': 'red', 'random': 'blue'}, multiple="stack",ax =axs[i])
+                sns.histplot(data = df ,x='Value', hue='Category', bins=50, kde=True, palette={'true': 'red', 'random': 'blue'}, multiple="stack",ax =axs[i,j])
                 #sns.histplot(x=first_elements_list, bins=100, kde=True, color = 'green',ax =axs[i,j])
                 # Customize the legend
                 legend_elements = [
                     Line2D([0], [0], color='red', lw=2, label='true'),
                     Line2D([0], [0], color='blue', lw=2, label='random')
                 ]
-                axs[i].legend(title="",handles = legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
-                axs[i].set_title(h + '\n' + m, fontsize = 7, color='red')
+                axs[i,j].legend(title="",handles = legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
+                axs[i,j].set_title(h + '\n' + m, fontsize = 7, color='red')
                # plt.title("Grouped Histogram")
-                axs[i].set_xlabel("Accuracy true vs random" )
-                axs[i].set_ylabel("Counts")
+                axs[i,j].set_xlabel("Accuracy true vs random" )
+                axs[i,j].set_ylabel("Counts")
                 j += 1
             i += 1
        fig.tight_layout(pad=8)
@@ -301,13 +301,13 @@ class plot_data:
         hormones = list(set(keys[0]))
         models = list(set(keys[1]))
         parameters = list(set(keys[2])) #use set to get unique values
-        # self.plot_confusion_matrix(hormones, models)
-        # self.plot_precision(hormones,models)
-        # self.plot_recall(hormones,models)
-        # self.plot_f1score(hormones,models)
-        # self.plot_accuracy(hormones,models)
-        # self.plot_prob(hormones,models,select_column_prob)
-        self.plot_boot_histograms(hormones,models)
+        self.plot_confusion_matrix(hormones, models)
+        self.plot_precision(hormones,models)
+        self.plot_recall(hormones,models)
+        self.plot_f1score(hormones,models)
+        self.plot_accuracy(hormones,models)
+        self.plot_prob(hormones,models,select_column_prob)
+      #  self.plot_boot_histograms(hormones,models)
 
 
         a=1

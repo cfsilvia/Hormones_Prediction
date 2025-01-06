@@ -120,13 +120,13 @@ class learning_data:
         probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr, f1 = self.test_model(model)
         
         #for bootstrapping
-        n_bootstraps = 100
-        permuted_accuracies = []
-        for _ in range(n_bootstraps): # do several times
-            X_bootstrap, y_bootstrap_permuted = self.randomize_train_data()       
-            model_b = self.train_model_b(X_bootstrap, y_bootstrap_permuted )
-            probabilities_b, accuracy_b,y_pred_b, classes_b,cm_b,precision_b,recall_b,roc_auc_b,fpr_b,tpr_b, f1_b = self.test_model(model_b)
-            permuted_accuracies.append(accuracy_b)
-        accuracies_bootstraps = np.mean(permuted_accuracies)
+        # n_bootstraps = 100
+        # permuted_accuracies = []
+        # for _ in range(n_bootstraps): # do several times
+        #     X_bootstrap, y_bootstrap_permuted = self.randomize_train_data()       
+        #     model_b = self.train_model_b(X_bootstrap, y_bootstrap_permuted )
+        #     probabilities_b, accuracy_b,y_pred_b, classes_b,cm_b,precision_b,recall_b,roc_auc_b,fpr_b,tpr_b, f1_b = self.test_model(model_b)
+        #     permuted_accuracies.append(accuracy_b)
+        # accuracies_bootstraps = np.mean(permuted_accuracies)
             
-        return probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1,accuracies_bootstraps
+        return probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 #,accuracies_bootstraps

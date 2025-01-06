@@ -76,8 +76,29 @@ class treat_data:
       #smote = SMOTE(sampling_strategy='auto', k_neighbors = k_neighbors) 
       X_resampled, y_resampled = smote.fit_resample(X, y) 
       return X_resampled, y_resampled 
-  
-    def __call__(self,model = None,n_repeats = None, sex = None, choice = None, hormones = None, architype = None): 
+    
+    # '''
+    # input: original data
+    # output: after randomization
+    # '''
+    # def randomize_data(self,data):
+        
+    #     # Bootstrap sample
+    #     indices = np.random.choice(range(data.shape[0]), size=data.shape[0], replace=False)
+    #     data_bootstrap = data.iloc[indices,:]
+    #     data_bootstrap_permutated = data_bootstrap.copy()
+        
+    #     # Permute labels to eliminate correlation
+    #     labels_permutated = np.random.permutation(data_bootstrap.iloc[:,data_bootstrap.shape[1]-1])
+    #     data_bootstrap_permutated.iloc[:,data_bootstrap.shape[1]-1] = labels_permutated
+        
+    #     return data_bootstrap_permutated
+    
+    '''
+    input: selected data
+    output : after splitting and learning get dictionary 
+    '''
+    def train_learning(self,selected_data, model=None,n_repeats = None):
          #create dictionary of the results
          results_dict = {}
          prob = []
@@ -91,12 +112,6 @@ class treat_data:
          tpr1 = []
          fscore = []
          accuracy_boot_perm = []
-         
-         #select data to work with
-         if choice == "2":
-            selected_data = self.select_data(sex, choice, hormones)
-         elif choice == "3":
-            selected_data = self.select_data(sex, choice, hormones,architype)
          for count in range(n_repeats):
             #get train  and test data
             X_train, X_test, y_train, y_test =self.split_data(selected_data)
@@ -106,7 +121,8 @@ class treat_data:
             X_train_resampled, y_train_resampled = self.balance_data(X_train_scaled,y_train)
             #learn the system
             new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model)
-            probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1,accuracies_bootstraps = new_obj()
+            #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
+            probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1  = new_obj()
             prob.append(probabilities)
             labels_pred.append(y_pred)
             confusion_matrix.append(cm)
@@ -117,7 +133,7 @@ class treat_data:
             fpr1.append(fpr)
             tpr1.append(tpr)
             fscore.append(f1)
-            accuracy_boot_perm.append(accuracies_bootstraps)
+           # accuracy_boot_perm.append(accuracies_bootstraps)
             
          results_dict['classes'] = classes
          results_dict['model'] = model
@@ -131,7 +147,27 @@ class treat_data:
          results_dict['roc_fpr'] = fpr1
          results_dict['roc_tpr'] = tpr1
          results_dict['fscore'] = fscore
-         results_dict['accuracy_boot_perm'] = accuracy_boot_perm
+         #results_dict['accuracy_boot_perm'] = accuracy_boot_perm
           
 
          return results_dict
+    
+    
+  
+    def __call__(self,model = None,n_repeats = None, sex = None, choice = None, hormones = None, architype = None): 
+        
+         
+         #select data to work with
+         if choice == "2":
+            selected_data = self.select_data(sex, choice, hormones)
+         elif choice == "3":
+            selected_data = self.select_data(sex, choice, hormones,architype)
+            
+         results_dict = self.train_learning(selected_data, model,n_repeats)
+         
+         return results_dict   
+         # if it is required randomize the data
+        #  if self.randomization:
+        #    selected_data = self.randomize_data(selected_data) 
+         #   
+         

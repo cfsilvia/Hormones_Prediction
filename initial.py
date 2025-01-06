@@ -1,9 +1,11 @@
 from manage_data import manage_data
+from manage_data_AviCondition import manage_data_AviCondition
 from treat_data import treat_data
 import pandas as pd
 import pickle
 from plot_data import plot_data
 from Find_better_features import Find_better_features
+from treat_random_data import treat_random_data
 
 def main_menu():
      while True:
@@ -23,11 +25,12 @@ def main_menu():
             output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
             distance = 0.5
             
-            new_obj = manage_data(pareto_file, data_file, output_file, distance)
+            #new_obj = manage_data(pareto_file, data_file, output_file, distance)
+            new_obj = manage_data_AviCondition(pareto_file, data_file, output_file, distance)
             new_obj()
             
         elif choice == "2":
-            type = "hierarchy_best"
+            type = "hierarchy_randomization"
             output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
             sex = 'male' #female or all
             input_file = 'F:/Ruti/AnalysisWithPython/Better_features/Better_features_male_hierarchy_100.pkl'
@@ -50,23 +53,41 @@ def main_menu():
             
             n_repeats = 100
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
-            title_file = sex + "_" + type + "_" + str(n_repeats)
-           # list_models = ["SVC_linear","SVC_rbf","random_forest","logistic","GaussianNB"]
-            list_models = ["SVC_linear","logistic"]
+            randomization = True # in the case want to randomize the classification
+            num_permutations = 3
+           # title_file = sex + "_" + type + "_" + str(n_repeats)
+           #for randomization
+            title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
+            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic"]
+            #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic","GaussianNB"]
             total_results_probability = pd.DataFrame()
             total_results_accuracy = pd.DataFrame()
             hormones_dict = {} #for each hormone dict there are different models dict and each one has the results in the form of dict
            
-            #loop to ge several hormone combinations
-            for count in range(len(hormones_combination)):
-                model_dict ={}
-                
-                for model in list_models:
-                    new_obj = treat_data(output_file)
-                    results_dict = new_obj(model, n_repeats,sex,choice,hormones_combination[count])
-                    model_dict[model] = results_dict # for each model there is a dictionary
-                    key_hormones = "-".join(hormones_combination[count])
-                    hormones_dict[key_hormones] = model_dict
+            if randomization:
+                for count in range(len(hormones_combination)):
+                    model_dict ={}
+                    for model in list_models:
+                        new_obj = treat_random_data(output_file)
+                        results_dict = treat_random_data._call_(new_obj,model, n_repeats,num_permutations,sex,choice,hormones_combination[count])
+                        model_dict[model] = results_dict # for each model there is a dictionary
+                        key_hormones = "-".join(hormones_combination[count])
+                        hormones_dict[key_hormones] = model_dict
+                        a=1
+                    
+               
+            else:
+                #loop to ge several hormone combinations
+                for count in range(len(hormones_combination)):
+                    model_dict ={}
+                    
+                    for model in list_models:
+                        new_obj = treat_data(output_file)
+                        results_dict = new_obj(model, n_repeats,sex,choice,hormones_combination[count])
+                        model_dict[model] = results_dict # for each model there is a dictionary
+                        key_hormones = "-".join(hormones_combination[count])
+                        hormones_dict[key_hormones] = model_dict
+                        
                     
             # # Save the dictionary
             with open(ouput_directory + title_file + '.pkl', 'wb') as f:
@@ -110,7 +131,7 @@ def main_menu():
 
               
         elif choice == "4": 
-            type = "hierarchy_best"
+            type = "hierarchy_randomization"
             sex = 'male'
             n_repeats = 100
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
