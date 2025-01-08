@@ -6,6 +6,7 @@ import pickle
 from plot_data import plot_data
 from Find_better_features import Find_better_features
 from treat_random_data import treat_random_data
+from sklearn.ensemble import AdaBoostClassifier
 
 def main_menu():
      while True:
@@ -30,36 +31,36 @@ def main_menu():
             new_obj()
             
         elif choice == "2":
-            type = "hierarchy_randomization"
+            type = "hierarchy_binary"
             output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
             sex = 'male' #female or all
-            input_file = 'F:/Ruti/AnalysisWithPython/Better_features/Better_features_male_hierarchy_100.pkl'
+            input_file = 'F:/Ruti/AnalysisWithPython/Better_features/Better_features_male_hierarchy_binary_100.pkl'
     #         hormones_combination =  [['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'], ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'],
     #                                 ['Hair.T','Hair.T_Cort.ratio'],['Hair.P','Hair.P_Cort.ratio'],['Hair.DHEA','Hair.Cort_DHEA.ratio'],['Hair.Cort', 'Hair.Cort_DHEA.ratio'],
     #                                 ['Hair.Cort', 'Hair.DHEA', 'Hair.T_Cort.ratio', 'Hair.P_Cort.ratio',
     #    'Hair.Cort_DHEA.ratio']]
             hormones_combination = Find_better_features.get_best_combinations(input_file)
-            hormones_combination.append(['Hair.T','Hair.T_Cort.ratio'])
-            hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'])
-            hormones_combination.append(['Hair.DHEA','Hair.Cort_DHEA.ratio'])
-            hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'])
+            # hormones_combination.append(['Hair.T','Hair.T_Cort.ratio'])
+            # hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'])
+            # hormones_combination.append(['Hair.DHEA','Hair.Cort_DHEA.ratio'])
+            # hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'])
             
-            #for females
-            hormones_combination.append(['Hair.P','Hair.P_Cort.ratio'])
-            hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'])
-            hormones_combination.append(['Hair.T','Hair.T_Cort.ratio'])
+            # #for females
+            # hormones_combination.append(['Hair.P','Hair.P_Cort.ratio'])
+            # hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'])
+            # hormones_combination.append(['Hair.T','Hair.T_Cort.ratio'])
            
             
             
             n_repeats = 100
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
-            randomization = True # in the case want to randomize the classification
+            randomization = False # in the case want to randomize the classification
             num_permutations = 3
-           # title_file = sex + "_" + type + "_" + str(n_repeats)
+            title_file = sex + "_" + type + "_" + str(n_repeats)
            #for randomization
-            title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
-            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic"]
-            #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic","GaussianNB"]
+            #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
+            #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic"]
+            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic","GaussianNB"]
             total_results_probability = pd.DataFrame()
             total_results_accuracy = pd.DataFrame()
             hormones_dict = {} #for each hormone dict there are different models dict and each one has the results in the form of dict
@@ -99,8 +100,8 @@ def main_menu():
         elif choice == "3":
             type = "I_status"
             output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
-            sex = 'all' #female or all
-            input_file = 'F:\Ruti\AnalysisWithPython\Better_features\Better_features_all_I_status_100.pkl'
+            sex = 'female' #female or all
+            input_file = 'F:\Ruti\AnalysisWithPython\Better_features\Better_features_male_hierarchy_binary_100.pkl'
             # hormones_combination = [['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'], ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'],
             #                         ['Hair.T','Hair.T_Cort.ratio'],['Hair.P','Hair.P_Cort.ratio'],['Hair.DHEA','Hair.Cort_DHEA.ratio']]
             
@@ -131,11 +132,11 @@ def main_menu():
 
               
         elif choice == "4": 
-            type = "hierarchy_randomization"
+            type = "hierarchy_binary"
             sex = 'male'
             n_repeats = 100
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
-            select_column_prob = 0 
+            select_column_prob = 1
             title_file = sex + "_" + type + "_" + str(n_repeats)
             # Load the Pickle file
             with open(ouput_directory + title_file + '.pkl', "rb") as f:
@@ -145,25 +146,27 @@ def main_menu():
             new_obj(select_column_prob)
             a=1
         elif choice == "5":
-                 type = "I_status"
-                 sex = "all"
+                 type = "hierarchy_binary"
+                 sex = "male"
                  features = {}
-                 choice_m = "3"
+                 choice_m = "2"
                  n_repeats = 100
                  hormones = ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio']
                  output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
                  #models_list = ["SVC_linear","random_forest","logistic"] "SVC_rbf" doesnt work
-                 models_list = ["SVC_linear","random_forest","logistic"]
+                 models_list = ["SVC_linear","random_forest","logistic", "decision_tree","k_neighbors","adaboost","qda"]
                  ouput_directory = "F:/Ruti/AnalysisWithPython/"
+                 positive_feature = "alpha"
                  title_file = 'Better_features' + '_' + sex + "_" + type + "_" + str(n_repeats)
                  
                  for model_name in models_list:
-                    new_obj = Find_better_features(output_file)
+                    new_obj = Find_better_features(output_file, positive_feature)
                     final_features = new_obj(model_name,n_repeats, sex, choice_m, hormones,type)
                     features[model_name] = {'sex' : sex, 'type' : type , 'final_features' : final_features}
                     a=1
                     
                     # # Save the dictionary
+
                  with open(ouput_directory + title_file + '.pkl', 'wb') as f:
                     pickle.dump(features, f)
                   

@@ -2,13 +2,16 @@ import pandas as pd
 from treat_data import treat_data
 from learning_data import learning_data
 from sklearn.feature_selection import RFECV
+from sklearn.metrics import make_scorer, f1_score
 from collections import Counter
 import pickle
+from sklearn.model_selection import StratifiedKFold
 
 class Find_better_features:
-    def __init__(self,output_file):
+    def __init__(self,output_file,positive_feature):
          self.output_file = output_file
          self.data = pd.read_excel(output_file,sheet_name="All_data")
+         self.positive_feature = positive_feature
     '''
     input: list of features
     output: order features 
@@ -72,13 +75,21 @@ class Find_better_features:
             X_train_scaled, X_test_scaled = new_obj.normalization(X_train,X_test)
             #balance the train data by using smote
             X_train_resampled, y_train_resampled = new_obj.balance_data(X_train_scaled,y_train)
+            #Convert the categorical data into binary
+            y_train_resampled = new_obj.label_encoded(y_train_resampled)
+            y_test = new_obj.label_encoded(y_test)
             #find the model
             new_obj_learn = learning_data(X_train_resampled, X_test_scaled, y_train_resampled,y_test,model_name)
             model = new_obj_learn.train_model()
             
+           
+            
+            
             # Step 4: Apply RFECV on the training data
             try:
-                rfecv = RFECV(estimator=model, step=1, cv=5, scoring='f1')
+                # Specify 'I' as the positive class
+                f1_scorer = make_scorer(f1_score, pos_label= 1)
+                rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,random_state=42), scoring='accuracy', n_jobs = -1)
                 rfecv.fit(X_train_resampled, y_train_resampled)
                 selected_features = X_train.columns[rfecv.support_]
                 # Results append to list
@@ -88,6 +99,7 @@ class Find_better_features:
                 print("Selected features:", selected_features)
             except Exception as e:
                 print(f"An error ocurred: {e}")
+        
         final_features = Find_better_features.order_features(list_features)    
 
         return final_features

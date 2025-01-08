@@ -8,6 +8,10 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.naive_bayes import GaussianNB
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
 
 class learning_data:
@@ -28,9 +32,18 @@ class learning_data:
       elif self.model_name == "SVC_rbf":
          model = SVC(kernel='rbf',probability=True)
       elif self.model_name == "random_forest":
-          model = RandomForestClassifier(random_state=42) 
+          model = RandomForestClassifier(n_estimators = 200, random_state=42) 
+          #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
       elif self.model_name == "logistic":
           model = LogisticRegression(max_iter=1000, random_state=42)
+      elif self.model_name == 'decision_tree':
+          model = DecisionTreeClassifier(random_state=42)
+      elif self.model_name == "k_neighbors":
+          model = KNeighborsClassifier(n_neighbors=5)
+      elif self.model_name == "adaboost":
+          model = AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=1), n_estimators=50, random_state=42)
+      elif self.model_name == "qda":
+          model = QuadraticDiscriminantAnalysis()
       elif self.model_name == "GaussianNB":
            model = GaussianNB()
             
@@ -50,6 +63,8 @@ class learning_data:
           model = RandomForestClassifier(random_state=42) 
       elif self.model_name == "logistic":
           model = LogisticRegression(max_iter=1000, random_state=42)
+      elif self.model_name == 'decision_tree':
+          model = DecisionTreeClassifier(random_state=42)
       elif self.model_name == "GaussianNB":
            model = GaussianNB()
             

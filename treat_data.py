@@ -77,6 +77,26 @@ class treat_data:
       X_resampled, y_resampled = smote.fit_resample(X, y) 
       return X_resampled, y_resampled 
     
+    '''
+    input: categorical variables of y
+    output: convertion into binary data
+    '''
+    def label_encoded(self,ydata):
+      yunique_values = ydata.unique()
+      custom_mapping = {'alpha' : 1, 'I' : 1, 'A' : 1, 'B' : 1, 'P' : 1, 'O' : 0,'submissive' : 0}
+      ydata_labeled = ydata.map(custom_mapping)
+      
+      yunique_numeric = [custom_mapping[label] for label in yunique_values]
+      combined = list(zip(yunique_values, yunique_numeric))
+
+      # Sort based on numeric values
+      sorted_combined = sorted(combined, key=lambda x: x[1])
+      # Extract the sorted labels and numeric values
+      sorted_labels, sorted_numeric_values = zip(*sorted_combined)
+      
+      
+      return ydata_labeled, sorted_labels
+    
     # '''
     # input: original data
     # output: after randomization
@@ -119,6 +139,9 @@ class treat_data:
             X_train_scaled, X_test_scaled = self.normalization(X_train,X_test)
             #balance the train data by using smote
             X_train_resampled, y_train_resampled = self.balance_data(X_train_scaled,y_train)
+            #Convert the categorical data into binary
+            y_train_resampled, classes = self.label_encoded(y_train_resampled)
+            y_test, classes = self.label_encoded(y_test)
             #learn the system
             new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model)
             #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
