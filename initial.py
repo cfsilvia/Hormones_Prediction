@@ -146,7 +146,7 @@ def main_menu():
             new_obj(select_column_prob)
             a=1
         elif choice == "5":
-                 type = "hierarchy_binary"
+                 type = "hierarchy_binary_vs1"
                  sex = "male"
                  features = {}
                  choice_m = "2"

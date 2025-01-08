@@ -6,6 +6,9 @@ from sklearn.metrics import make_scorer, f1_score
 from collections import Counter
 import pickle
 from sklearn.model_selection import StratifiedKFold
+import warnings
+# Example: Ignore DeprecationWarning
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class Find_better_features:
     def __init__(self,output_file,positive_feature):
@@ -76,8 +79,8 @@ class Find_better_features:
             #balance the train data by using smote
             X_train_resampled, y_train_resampled = new_obj.balance_data(X_train_scaled,y_train)
             #Convert the categorical data into binary
-            y_train_resampled = new_obj.label_encoded(y_train_resampled)
-            y_test = new_obj.label_encoded(y_test)
+            y_train_resampled,classes = new_obj.label_encoded(y_train_resampled)
+            y_test, classes = new_obj.label_encoded(y_test)
             #find the model
             new_obj_learn = learning_data(X_train_resampled, X_test_scaled, y_train_resampled,y_test,model_name)
             model = new_obj_learn.train_model()
@@ -89,7 +92,7 @@ class Find_better_features:
             try:
                 # Specify 'I' as the positive class
                 f1_scorer = make_scorer(f1_score, pos_label= 1)
-                rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,random_state=42), scoring='accuracy', n_jobs = -1)
+                rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,shuffle=True,random_state=42), scoring='accuracy', n_jobs = -1)
                 rfecv.fit(X_train_resampled, y_train_resampled)
                 selected_features = X_train.columns[rfecv.support_]
                 # Results append to list
