@@ -1,4 +1,6 @@
 import pandas as pd
+from manage_data_AviCondition import manage_data_AviCondition
+
 #THIS CLASS MANAGE HOW TO GET AN EXCEL FILE WITH ALL THE DATA
 class manage_data:
     def __init__(self,pareto_file,pca_file,output_file,distance):
@@ -15,8 +17,13 @@ class manage_data:
         data_pareto = manage_data.read_excel_sheet(self.pareto_file, 'WithDistanceFromVertix')
         data_pca =manage_data.read_excel_sheet(self.pca_file, 'Mean_Data')
         #retain relevant inf. 
-        columns_to_extract = [0,1,2,3,4,5,6,64,65,66,67,68,69,70] 
+        #columns_to_extract = [0,1,2,3,4,5,6,64,65,66,67,68,69,70] 
+        #columns_to_extract = [0,1,2,3,4,5,6,64,65,66,67] 
+        columns_to_extract = [0,1,2,3,4,5,6,64,65,66,67,68,69,70,71,72] 
         data_pca_selected = data_pca.iloc[:,columns_to_extract]
+        #add new ratios
+        data_pca_selected = manage_data.ratios_hormones(data_pca_selected)
+        #
         columns_to_extract = [0,1,2,3,4,5,6,10,11,12,13] 
         data_pareto_selected = data_pareto.iloc[:,columns_to_extract]
         #rename
@@ -56,13 +63,73 @@ class manage_data:
            merged_df[column_name_new] = item
            merged_df.loc[merged_df[column_name] > self.distance,column_name_new] = 'O'
         return merged_df
-        
+    '''
+    input: data frame
+    output: data frame -replace in names of data frame / by _ 
+    '''    
+    def replace_strings(self,merged_df):
+        merged_df.columns = merged_df.columns.str.replace('/','_')
+        return merged_df
     
+    '''
+    input: data frame
+    output: add column to data frame -take original distance only from A,B and P architypes and assign the architype with minimum distance to.
+    '''
+    def add_status_distance_architype_ABP(self,data):
+        data['Min_distance_ABP'] = data[['A', 'B', 'P']].idxmin(axis=1)
+        return data
+        
+    '''
+    input: data
+    output: add columns with information about the relation with the architype, coefficient to each architype
+    '''
+    def add_coef_with_architype(self,merged_df):
+        new_obj = manage_data_AviCondition(self.pareto_file, self.pca_file)
+        data = new_obj(merged_df)
+        return data
+    
+    '''
+    input: data
+    output : add column with status- assign architype according max coef
+    '''
+    def add_status_architype_avi(self, parameters, data):
+        data['Assig_max_coef_with_' + '_'.join(parameters)] = data[parameters].idxmax(axis=1)
+        return data
+        
+    '''
+      input: selected data
+      output: selected data with ratio
+    '''
+
+    @staticmethod
+    def ratios_hormones(data):  
+        #get the last four columns
+        # last_four_columns = data.iloc[:,-4:]
+        last_four_columns = data.iloc[:,-9:]
+        #generate all pairwis
+        for i, col1 in enumerate(last_four_columns.columns):
+             for j, col2 in enumerate(last_four_columns.columns):
+                 if j != i:
+                     ratio_name = f"{col1}_to_{col2}"
+                     data[ratio_name] = last_four_columns[col1] / last_four_columns[col2]
+        return data
+                 
+            
+        
     def __call__(self):
          merged_df = self.append_data()
+         merged_df = self.replace_strings(merged_df)
          merged_df = self.add_status(merged_df)
-         merged_df = self.normalize_distance(merged_df)
-         merged_df = self.add_status_architype(merged_df)
+        #  merged_df = self.normalize_distance(merged_df)
+        #  merged_df = self.add_status_architype(merged_df)
+        #  merged_df = self.add_status_distance_architype_ABP(merged_df)
+        #  #add avi calculation
+        #  merged_df = self.add_coef_with_architype(merged_df)
+        #  parameters = ['I_avi','A_avi','B_avi','P_avi']
+        #  merged_df = self.add_status_architype_avi(parameters, merged_df)
+        #  parameters = ['A_avi','B_avi','P_avi']
+        #  merged_df = self.add_status_architype_avi(parameters, merged_df)
+         
          #save into  excel
          merged_df.to_excel(self.output_file, sheet_name = "All_data", index=False)
          a=1
