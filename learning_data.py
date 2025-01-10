@@ -12,6 +12,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.metrics import mean_squared_error, r2_score
 
 
 class learning_data:
@@ -108,8 +109,13 @@ class learning_data:
         roc_auc = roc_auc_score(labels_true, probabilities[:,0])
         # Compute ROC curve
         fpr, tpr, _ = roc_curve(labels_true, probabilities[:,0])
+        #
+        # Evaluate the model
+        mse = mean_squared_error(self.y_test, y_pred) #mean squared error
+        r2 = r2_score(self.y_test, y_pred) #rsquared score
+
         
-        return probabilities, accuracy,y_pred, classes,cm,precision,recall, roc_auc,fpr,tpr,f1
+        return probabilities, accuracy,y_pred, classes,cm,precision,recall, roc_auc,fpr,tpr,f1,mse,r2
     
     '''
     input: train data
@@ -132,7 +138,7 @@ class learning_data:
     def __call__(self):
         #original data
         model = self.train_model()
-        probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr, f1 = self.test_model(model)
+        probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr, f1,mse, r2 = self.test_model(model)
         
         #for bootstrapping
         # n_bootstraps = 100
@@ -144,4 +150,4 @@ class learning_data:
         #     permuted_accuracies.append(accuracy_b)
         # accuracies_bootstraps = np.mean(permuted_accuracies)
             
-        return probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 #,accuracies_bootstraps
+        return probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2 #,accuracies_bootstraps

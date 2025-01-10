@@ -131,6 +131,8 @@ class treat_data:
          fpr1 = []
          tpr1 = []
          fscore = []
+         mean_s_error = []
+         r_square_error = []
          accuracy_boot_perm = []
          for count in range(n_repeats):
             #get train  and test data
@@ -145,7 +147,7 @@ class treat_data:
             #learn the system
             new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model)
             #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
-            probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1  = new_obj()
+            probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2  = new_obj()
             prob.append(probabilities)
             labels_pred.append(y_pred)
             confusion_matrix.append(cm)
@@ -156,6 +158,8 @@ class treat_data:
             fpr1.append(fpr)
             tpr1.append(tpr)
             fscore.append(f1)
+            mean_s_error.append(mse)
+            r_square_error.append(r2)
            # accuracy_boot_perm.append(accuracies_bootstraps)
             
          results_dict['classes'] = classes
@@ -170,6 +174,8 @@ class treat_data:
          results_dict['roc_fpr'] = fpr1
          results_dict['roc_tpr'] = tpr1
          results_dict['fscore'] = fscore
+         results_dict['mean_square_error'] = mean_s_error
+         results_dict['r_square_error'] = r_square_error
          #results_dict['accuracy_boot_perm'] = accuracy_boot_perm
           
 
