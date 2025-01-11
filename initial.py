@@ -133,9 +133,9 @@ def main_menu():
 
               
         elif choice == "4": 
-            type = "hierarchy_binary"
+            type = "hierarchy_all_ratios"
             sex = 'male'
-            n_repeats = 100
+            n_repeats = 400
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
             select_column_prob = 1
             title_file = sex + "_" + type + "_" + str(n_repeats)

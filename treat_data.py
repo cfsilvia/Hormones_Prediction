@@ -132,7 +132,7 @@ class treat_data:
          tpr1 = []
          fscore = []
          mean_s_error = []
-         r_square_error = []
+         r_square = []
          accuracy_boot_perm = []
          for count in range(n_repeats):
             #get train  and test data
@@ -159,7 +159,7 @@ class treat_data:
             tpr1.append(tpr)
             fscore.append(f1)
             mean_s_error.append(mse)
-            r_square_error.append(r2)
+            r_square.append(r2)
            # accuracy_boot_perm.append(accuracies_bootstraps)
             
          results_dict['classes'] = classes
@@ -175,7 +175,7 @@ class treat_data:
          results_dict['roc_tpr'] = tpr1
          results_dict['fscore'] = fscore
          results_dict['mean_square_error'] = mean_s_error
-         results_dict['r_square_error'] = r_square_error
+         results_dict['r_square'] = r_square
          #results_dict['accuracy_boot_perm'] = accuracy_boot_perm
           
 
