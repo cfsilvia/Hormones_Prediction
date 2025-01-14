@@ -143,11 +143,13 @@ class treat_data:
             X_train_resampled, y_train_resampled = self.balance_data(X_train_scaled,y_train)
             #Convert the categorical data into binary
             y_train_resampled, classes = self.label_encoded(y_train_resampled)
+            
             y_test, classes = self.label_encoded(y_test)
+            classes = list(classes)
             #learn the system
             new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model)
             #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
-            probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2  = new_obj()
+            probabilities, accuracy,y_pred, classes_num,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2  = new_obj()
             prob.append(probabilities)
             labels_pred.append(y_pred)
             confusion_matrix.append(cm)

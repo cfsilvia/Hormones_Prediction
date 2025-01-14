@@ -4,6 +4,7 @@ from treat_data import treat_data
 import pandas as pd
 import pickle
 from plot_data import plot_data
+ 
 from Find_better_features import Find_better_features
 from treat_random_data import treat_random_data
 from sklearn.ensemble import AdaBoostClassifier
@@ -32,10 +33,10 @@ def main_menu():
             new_obj()
             
         elif choice == "2":
-            type = "hierarchy_binary"
-            output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
-            sex = 'male' #female or all
-            input_file = 'F:/Ruti/AnalysisWithPython/Better_features/Better_features_male_hierarchy_binary_100.pkl'
+            type = "hierarchy_all_ratios"
+            output_file ='F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx'
+            sex = 'female' #female or all
+            input_file = 'F:/Ruti/AnalysisWithPython/Better_features_female_hierarchy_all_ratios_400.pkl'
     #         hormones_combination =  [['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'], ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'],
     #                                 ['Hair.T','Hair.T_Cort.ratio'],['Hair.P','Hair.P_Cort.ratio'],['Hair.DHEA','Hair.Cort_DHEA.ratio'],['Hair.Cort', 'Hair.Cort_DHEA.ratio'],
     #                                 ['Hair.Cort', 'Hair.DHEA', 'Hair.T_Cort.ratio', 'Hair.P_Cort.ratio',
@@ -53,7 +54,7 @@ def main_menu():
            
             
             
-            n_repeats = 100
+            n_repeats = 400
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
             randomization = False # in the case want to randomize the classification
             num_permutations = 3
@@ -61,7 +62,7 @@ def main_menu():
            #for randomization
             #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
             #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic"]
-            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic","GaussianNB"]
+            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
             total_results_probability = pd.DataFrame()
             total_results_accuracy = pd.DataFrame()
             hormones_dict = {} #for each hormone dict there are different models dict and each one has the results in the form of dict
@@ -134,7 +135,7 @@ def main_menu():
               
         elif choice == "4": 
             type = "hierarchy_all_ratios"
-            sex = 'male'
+            sex = 'female'
             n_repeats = 400
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
             select_column_prob = 1
@@ -144,20 +145,29 @@ def main_menu():
                 data = pickle.load(f)
                 
             new_obj = plot_data(data, title_file, ouput_directory)
-            new_obj(select_column_prob)
+            total_data, total_data_filter_confusion,total_data_filter_all = new_obj(select_column_prob)
+           
+            
+            with pd.ExcelWriter(ouput_directory + title_file  + '.xlsx') as writer:
+                total_data.to_excel(writer, sheet_name='all_predictions', index=False)
+                total_data_filter_confusion.to_excel(writer, sheet_name='all_confusion_filter', index=False)
+                total_data_filter_all.to_excel(writer, sheet_name='all_conffilter_precfilter', index=False)
+
+            
+            
             a=1
         elif choice == "5":
-                 type = "hierarchy_binary_vs1"
-                 sex = "male"
+                 type = "hierarchy_all_ratios"
+                 sex = "female"
                  features = {}
                  choice_m = "2"
-                 n_repeats = 100
+                 n_repeats = 400
                  hormones =['Hair.P','Hair.T',	'Hair.Cort', 'Hair.DHEA', 'Hair.P_to_Hair.T',	'Hair.P_to_Hair.Cort', 'Hair.P_to_Hair.DHEA',
                             'Hair.T_to_Hair.P', 'Hair.T_to_Hair.Cort', 'Hair.T_to_Hair.DHEA',	'Hair.Cort_to_Hair.P', 'Hair.Cort_to_Hair.T',	
                             'Hair.Cort_to_Hair.DHEA', 'Hair.DHEA_to_Hair.P', 'Hair.DHEA_to_Hair.T', 'Hair.DHEA_to_Hair.Cort']
 
                 # hormones = ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio']
-                 output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
+                 output_file ='F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx'
                  #models_list = ["SVC_linear","random_forest","logistic"] "SVC_rbf" doesnt work
                  #models_list = ["SVC_linear","random_forest","logistic", "decision_tree","k_neighbors","adaboost","qda"]
                  models_list = ["SVC_linear","random_forest","logistic", "decision_tree"]

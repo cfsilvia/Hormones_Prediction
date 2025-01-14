@@ -92,7 +92,7 @@ class Find_better_features:
             try:
                 # Specify 'I' as the positive class
                 f1_scorer = make_scorer(f1_score, pos_label= 1)
-                rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,shuffle=True,random_state=42), scoring='f1_scorer', n_jobs = -1)
+                rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,shuffle=True,random_state=42), scoring=f1_scorer, n_jobs = -1)
                 rfecv.fit(X_train_resampled, y_train_resampled)
                 selected_features = X_train.columns[rfecv.support_]
                 # Results append to list
