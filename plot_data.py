@@ -41,7 +41,7 @@ class plot_data:
                 first_elements_labels= plot_data.extract_first_class(list_labels)
                 # Convert counts to frequencies
                 #frequencies = [(count / sum(first_elements_list))*100 for count in first_elements_list]
-                
+                first_elements_labels = [class_names[0] if label == 0 else class_names[1] for label in first_elements_labels]
                 
                 # Create a DataFrame
                 df = pd.DataFrame({'Category': first_elements_labels, 'Value': first_elements_list } )

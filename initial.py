@@ -35,8 +35,8 @@ def main_menu():
         elif choice == "2":
             type = "hierarchy_all_ratios"
             output_file ='F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx'
-            sex = 'female' #female or all
-            input_file = 'F:/Ruti/AnalysisWithPython/Better_features_female_hierarchy_all_ratios_400.pkl'
+            sex = 'male' #female or all
+            input_file = 'F:/Ruti/AnalysisWithPython/Better_features_male_hierarchy_all_ratios_400.pkl'
     #         hormones_combination =  [['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'], ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'],
     #                                 ['Hair.T','Hair.T_Cort.ratio'],['Hair.P','Hair.P_Cort.ratio'],['Hair.DHEA','Hair.Cort_DHEA.ratio'],['Hair.Cort', 'Hair.Cort_DHEA.ratio'],
     #                                 ['Hair.Cort', 'Hair.DHEA', 'Hair.T_Cort.ratio', 'Hair.P_Cort.ratio',
@@ -135,7 +135,7 @@ def main_menu():
               
         elif choice == "4": 
             type = "hierarchy_all_ratios"
-            sex = 'female'
+            sex = 'male'
             n_repeats = 400
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
             select_column_prob = 1
