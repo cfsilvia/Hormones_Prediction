@@ -150,4 +150,4 @@ class learning_data:
         #     permuted_accuracies.append(accuracy_b)
         # accuracies_bootstraps = np.mean(permuted_accuracies)
             
-        return probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2 #,accuracies_bootstraps
+        return probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2,model #,accuracies_bootstraps
