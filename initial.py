@@ -4,10 +4,10 @@ from treat_data import treat_data
 import pandas as pd
 import pickle
 from plot_data import plot_data
- 
+from treat_validation_data import treat_validation_data
 from Find_better_features import Find_better_features
 from treat_random_data import treat_random_data
-from sklearn.ensemble import AdaBoostClassifier
+#from sklearn.ensemble import AdaBoostClassifier
 
 def main_menu():
      while True:
@@ -17,9 +17,10 @@ def main_menu():
         print("3. Option 3: Predict personality")
         print("4. Option 4: Get graphs and tables")
         print("5. Option 5: Find better features for each model")
-        print("6. Option 6: break")
+        print("6. Option 6: Evaluate validation data")
+        print("7. Option 7: break")
         
-        choice = input("Enter your choice (1-6): ")
+        choice = input("Enter your choice (1-7): ")
         
         if choice == "1":
             pareto_file = 'F:/Ruti/Pareto/10.09.24_stage2_stage2_Pareto_Information.xlsx'
@@ -37,23 +38,9 @@ def main_menu():
             output_file ='F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx'
             sex = 'male' #female or all
             input_file = 'F:/Ruti/AnalysisWithPython/Better_features_male_hierarchy_all_ratios_400.pkl'
-    #         hormones_combination =  [['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'], ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'],
-    #                                 ['Hair.T','Hair.T_Cort.ratio'],['Hair.P','Hair.P_Cort.ratio'],['Hair.DHEA','Hair.Cort_DHEA.ratio'],['Hair.Cort', 'Hair.Cort_DHEA.ratio'],
-    #                                 ['Hair.Cort', 'Hair.DHEA', 'Hair.T_Cort.ratio', 'Hair.P_Cort.ratio',
-    #    'Hair.Cort_DHEA.ratio']]
+    #         
             hormones_combination = Find_better_features.get_best_combinations(input_file)
-            # hormones_combination.append(['Hair.T','Hair.T_Cort.ratio'])
-            # hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'])
-            # hormones_combination.append(['Hair.DHEA','Hair.Cort_DHEA.ratio'])
-            # hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'])
-            
-            # #for females
-            # hormones_combination.append(['Hair.P','Hair.P_Cort.ratio'])
-            # hormones_combination.append(['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'])
-            # hormones_combination.append(['Hair.T','Hair.T_Cort.ratio'])
-           
-            
-            
+
             n_repeats = 400
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
             randomization = False # in the case want to randomize the classification
@@ -134,7 +121,7 @@ def main_menu():
 
               
         elif choice == "4": 
-            type = "hierarchy_all_ratios"
+            type = "hierarchy_all_ratios_hormones"
             sex = 'male'
             n_repeats = 400
             ouput_directory = "F:/Ruti/AnalysisWithPython/"
@@ -151,7 +138,7 @@ def main_menu():
             with pd.ExcelWriter(ouput_directory + title_file  + '.xlsx') as writer:
                 total_data.to_excel(writer, sheet_name='all_predictions', index=False)
                 total_data_filter_confusion.to_excel(writer, sheet_name='all_confusion_filter', index=False)
-                total_data_filter_all.to_excel(writer, sheet_name='all_conffilter_precfilter', index=False)
+                total_data_filter_all.to_excel(writer, sheet_name='final_data', index=False)
 
             
             
@@ -185,8 +172,32 @@ def main_menu():
 
                  with open(ouput_directory + title_file + '.pkl', 'wb') as f:
                     pickle.dump(features, f)
-                  
-        elif choice == "6":
+                    
+        elif choice == "6": #for validation
+            type = "hierarchy_all_ratios_hormones"
+            train_file ='F:/Ruti/AnalysisWithPython/data_all_hormones_vs2.xlsx'
+            validation_file = 'F:/Ruti/fresh_Data/Hormones_Mice_ctrl_casp3_2F_1M_vs1.xlsx'
+            sex = 'male' #female or all
+            choice = "2"
+            n_repeats = 1
+            columns_validation = ['sex','status','Prog','T','Cort','DHEA','AEA','AG',
+                                  'OEA','SEA','PEA']
+
+            hormones_list = ['Prog-T-Cort_to_T']
+            
+            model = ["SVC_linear"]
+            hormones_dict = {}
+            for count, h in enumerate(hormones_list):
+              #convert h into list
+              hormones = h.split('-')
+              new_obj = treat_validation_data(train_file, validation_file,
+                                              columns_validation)
+              results_dict = new_obj(model[count] ,n_repeats, sex , choice , hormones)
+              hormones_dict[h] = results_dict
+            a=1       
+        elif choice == "7":
+            
+            
             break
         else:
             print("Invalid choice. Please try again.")
