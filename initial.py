@@ -149,12 +149,10 @@ def main_menu():
                  features = {}
                  choice_m = "2"
                  n_repeats = 400
-                 hormones =['Hair.P','Hair.T',	'Hair.Cort', 'Hair.DHEA', 'Hair.P_to_Hair.T',	'Hair.P_to_Hair.Cort', 'Hair.P_to_Hair.DHEA',
-                            'Hair.T_to_Hair.P', 'Hair.T_to_Hair.Cort', 'Hair.T_to_Hair.DHEA',	'Hair.Cort_to_Hair.P', 'Hair.Cort_to_Hair.T',	
-                            'Hair.Cort_to_Hair.DHEA', 'Hair.DHEA_to_Hair.P', 'Hair.DHEA_to_Hair.T', 'Hair.DHEA_to_Hair.Cort']
-
-                # hormones = ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio']
+                
                  output_file ='F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx'
+                 data = pd.read_excel(output_file,sheet_name="All_data")
+                 hormones = hormones = data.iloc[:,7:88].columns.tolist()
                  #models_list = ["SVC_linear","random_forest","logistic"] "SVC_rbf" doesnt work
                  #models_list = ["SVC_linear","random_forest","logistic", "decision_tree","k_neighbors","adaboost","qda"]
                  models_list = ["SVC_linear","random_forest","logistic", "decision_tree"]
