@@ -8,7 +8,7 @@ class manage_data:
         self.pca_file = pca_file
         self.output_file = output_file
         self.distance = distance
-        self.columns_hormones_to_extract = columns_hormones_to_extract
+        self.columns_to_extract = columns_hormones_to_extract
         
     '''
     input: pareto and pca files
@@ -25,10 +25,11 @@ class manage_data:
         #add new ratios
         data_pca_selected = manage_data.ratios_hormones(data_pca_selected)
         #
-        columns_to_extract = [0,1,2,3,4,5,6,10,11,12,13] 
+        columns_to_extract = [1,2,3,4,5,6,7,11,12,13,14] 
         data_pareto_selected = data_pareto.iloc[:,columns_to_extract]
         #rename
-        columns_to_rename = {7: 'I', 8: 'A' , 9: 'B' , 10: 'P'}  # Map index to new name
+        num_columns = data_pareto_selected.shape[1]
+        columns_to_rename = { (num_columns - 4): 'I',  (num_columns - 3): 'A' ,  (num_columns - 2): 'B' , (num_columns - 1): 'P'}  # Map index to new name
         data_pareto_selected.rename(columns={data_pareto_selected.columns[k]: v for k, v in columns_to_rename.items()}, inplace=True)
         #merge
         merged_df = pd.merge(data_pca_selected,data_pareto_selected, on = ['Experiment','sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal'])
@@ -119,17 +120,17 @@ class manage_data:
         
     def __call__(self):
          merged_df = self.append_data()
-         merged_df = self.replace_strings(merged_df)
+        # merged_df = self.replace_strings(merged_df)
          merged_df = self.add_status(merged_df)
-        #  merged_df = self.normalize_distance(merged_df)
-        #  merged_df = self.add_status_architype(merged_df)
-        #  merged_df = self.add_status_distance_architype_ABP(merged_df)
-        #  #add avi calculation
-        #  merged_df = self.add_coef_with_architype(merged_df)
-        #  parameters = ['I_avi','A_avi','B_avi','P_avi']
-        #  merged_df = self.add_status_architype_avi(parameters, merged_df)
-        #  parameters = ['A_avi','B_avi','P_avi']
-        #  merged_df = self.add_status_architype_avi(parameters, merged_df)
+         merged_df = self.normalize_distance(merged_df)
+         merged_df = self.add_status_architype(merged_df)
+         merged_df = self.add_status_distance_architype_ABP(merged_df)
+         #add avi calculation
+         merged_df = self.add_coef_with_architype(merged_df)
+         parameters = ['I_avi','A_avi','B_avi','P_avi']
+         merged_df = self.add_status_architype_avi(parameters, merged_df)
+         parameters = ['A_avi','B_avi','P_avi']
+         merged_df = self.add_status_architype_avi(parameters, merged_df)
          
          #save into  excel
          merged_df.to_excel(self.output_file, sheet_name = "All_data", index=False)
