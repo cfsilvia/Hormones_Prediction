@@ -17,8 +17,10 @@ def main_menu(choice,data):
             data_file = data['1']['data_file']
             output_file =data['1']['output_file']
             distance = data['1']['distance']
+            columns_hormones_to_extract = data['1']['columns_to_extract']
             
-            new_obj = manage_data(pareto_file, data_file, output_file, distance)
+            
+            new_obj = manage_data(pareto_file, data_file, output_file, distance,columns_hormones_to_extract)
            
             new_obj()
             

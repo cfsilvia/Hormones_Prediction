@@ -3,11 +3,12 @@ from manage_data_AviCondition import manage_data_AviCondition
 
 #THIS CLASS MANAGE HOW TO GET AN EXCEL FILE WITH ALL THE DATA
 class manage_data:
-    def __init__(self,pareto_file,pca_file,output_file,distance):
+    def __init__(self,pareto_file,pca_file,output_file,distance,columns_hormones_to_extract):
         self.pareto_file = pareto_file
         self.pca_file = pca_file
         self.output_file = output_file
         self.distance = distance
+        self.columns_hormones_to_extract = columns_hormones_to_extract
         
     '''
     input: pareto and pca files
@@ -19,8 +20,8 @@ class manage_data:
         #retain relevant inf. 
         #columns_to_extract = [0,1,2,3,4,5,6,64,65,66,67,68,69,70] 
         #columns_to_extract = [0,1,2,3,4,5,6,64,65,66,67] 
-        columns_to_extract = [0,1,2,3,4,5,6,64,65,66,67,68,69,70,71,72] 
-        data_pca_selected = data_pca.iloc[:,columns_to_extract]
+       # columns_to_extract = [0,1,2,3,4,5,6,64,65,66,67,68,69,70,71,72] 
+        data_pca_selected = data_pca.iloc[:,self.columns_to_extract]
         #add new ratios
         data_pca_selected = manage_data.ratios_hormones(data_pca_selected)
         #
