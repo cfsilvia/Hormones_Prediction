@@ -1,0 +1,50 @@
+#First step, create an excel with the data to use
+'1':
+  data_file: F:/Ruti/PCA/Copy of PCA_PCA__10.9.24_stage2_NEW_stage2_ECBs.xlsx
+  distance: 0.5
+  output_file: F:/Ruti/AnalysisWithPython/data_to_use.xlsx
+  pareto_file: F:/Ruti/Pareto/10.09.24_stage2_stage2_Pareto_Information.xlsx
+#Predict hierarchy
+'2':
+  data_features: F:/Ruti/AnalysisWithPython/Better_features_male_hierarchy_all_ratios_400.pkl
+  data_file: F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx
+  n_repeats: 400
+  output_directory: F:/Ruti/AnalysisWithPython/
+  sex: male #male, female or all
+  type: hierarchy_all_ratios
+#Predict personality
+'3':
+  data_features: F:/Ruti/AnalysisWithPython/Better_features_male_hierarchy_all_ratios_400.pkl
+  data_file: F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx
+  n_repeats: 400
+  output_directory: F:/Ruti/AnalysisWithPython/
+  sex: male # male, female or all
+  type: I_status
+#Get graphs and tables
+'4':
+  n_repeats: 400
+  output_directory: F:/Ruti/AnalysisWithPython/
+  sex: male # male, female or all
+  type: hierarchy_all_ratios_hormones
+#Find better features for each model  
+'5':
+  choice_m: '2' #select if the choice is hierarchy or personality
+  data_file: F:/Ruti/AnalysisWithPython/data_to_use_complete.xlsx
+  n_repeats: 400
+  sex: female # male, female or all
+  type: hierarchy_all_ratios
+  index_begin : 7 #first index from the excel file with hormones
+  index_final : 88 #final index from the excel file with hormones
+  output_directory: F:/Ruti/AnalysisWithPython/  
+#Evaluate validation data  
+'6':
+  choice: '2' #select if the choice is hierarchy-2 or personality-3
+  n_repeats: 1
+  sex: male # male, female or all
+  train_file: F:/Ruti/AnalysisWithPython/data_all_hormones_vs2.xlsx
+  type: hierarchy_all_ratios_hormones
+  validation_file: F:/Ruti/fresh_Data/Hormones_Mice_ctrl_casp3_2F_1M_vs1.xlsx
+   
+
+#select your choice
+choice: '1'

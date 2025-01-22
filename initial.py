@@ -7,51 +7,36 @@ from plot_data import plot_data
 from treat_validation_data import treat_validation_data
 from Find_better_features import Find_better_features
 from treat_random_data import treat_random_data
+import yaml
 #from sklearn.ensemble import AdaBoostClassifier
 
-def main_menu():
-     while True:
-        print("\nMain Menu")
-        print("1. Option 1: First step, create an excel with the data to use")
-        print("2. Option 2: Predict hierarchy")
-        print("3. Option 3: Predict personality")
-        print("4. Option 4: Get graphs and tables")
-        print("5. Option 5: Find better features for each model")
-        print("6. Option 6: Evaluate validation data")
-        print("7. Option 7: break")
-        
-        choice = input("Enter your choice (1-7): ")
-        
+def main_menu(choice,data):
+     
         if choice == "1":
-            pareto_file = 'F:/Ruti/Pareto/10.09.24_stage2_stage2_Pareto_Information.xlsx'
-          #  data_file = 'F:/Ruti/PCA/PCA_PCA__10.9.24_stage2_NEW_stage2.xlsx'
-            data_file = 'F:/Ruti/PCA/Copy of PCA_PCA__10.9.24_stage2_NEW_stage2_ECBs.xlsx'
-            output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
-            distance = 0.5
+            pareto_file = data['1']['pareto_file'] 
+            data_file = data['1']['data_file']
+            output_file =data['1']['output_file']
+            distance = data['1']['distance']
             
             new_obj = manage_data(pareto_file, data_file, output_file, distance)
-           # new_obj = manage_data_AviCondition(pareto_file, data_file, output_file, distance)
+           
             new_obj()
             
         elif choice == "2":
-            type = "hierarchy_all_ratios"
-            output_file ='F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx'
-            sex = 'male' #female or all
-            input_file = 'F:/Ruti/AnalysisWithPython/Better_features_male_hierarchy_all_ratios_400.pkl'
-    #         
-            hormones_combination = Find_better_features.get_best_combinations(input_file)
-
-            n_repeats = 400
-            ouput_directory = "F:/Ruti/AnalysisWithPython/"
+            type = data['2']['type'] 
+            output_file =data['2']['data_file']
+            sex = data['2']['sex'] #female or all
+            input_file = data['2']['data_features']
+            n_repeats = data['2']['n_repeats']
+            ouput_directory = data['2']['output_directory']
             randomization = False # in the case want to randomize the classification
-            num_permutations = 3
+            num_permutations = 3 
+            
+            hormones_combination = Find_better_features.get_best_combinations(input_file)
             title_file = sex + "_" + type + "_" + str(n_repeats)
            #for randomization
             #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
-            #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic"]
             list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
-            total_results_probability = pd.DataFrame()
-            total_results_accuracy = pd.DataFrame()
             hormones_dict = {} #for each hormone dict there are different models dict and each one has the results in the form of dict
            
             if randomization:
@@ -87,20 +72,17 @@ def main_menu():
         
         
         elif choice == "3":
-            type = "I_status"
-            output_file ='F:\Ruti\AnalysisWithPython\data_to_use.xlsx'
-            sex = 'female' #female or all
-            input_file = 'F:\Ruti\AnalysisWithPython\Better_features\Better_features_male_hierarchy_binary_100.pkl'
-            # hormones_combination = [['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'], ['Hair.P', 'Hair.T','Hair.Cort', 'Hair.DHEA','Hair.T_Cort.ratio', 'Hair.P_Cort.ratio','Hair.Cort_DHEA.ratio'],['Hair.T_Cort.ratio', 'Hair.P_Cort.ratio'],
-            #                         ['Hair.T','Hair.T_Cort.ratio'],['Hair.P','Hair.P_Cort.ratio'],['Hair.DHEA','Hair.Cort_DHEA.ratio']]
-            
+            type = data['3']['type']
+            output_file =data['3']['data_file']
+            sex = data['3']['sex']
+            input_file = data['3']['data_features']
+            ouput_directory = data['3']['output_directory']
+            n_repeats = data['3']['n_repeats']
+             
             hormones_combination = Find_better_features.get_best_combinations(input_file)
-            n_repeats = 100
-            ouput_directory = "F:/Ruti/AnalysisWithPython/"
             title_file = sex + "_" + type + "_" + str(n_repeats)
-            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic","GaussianNB"]
-            total_results_probability = pd.DataFrame()
-            total_results_accuracy = pd.DataFrame()
+            #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic","GaussianNB"]
+            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
             hormones_dict = {} #for each hormone dict there are different models dict and each one has the results in the form of dict
            
             #loop to ge several hormone combinations
@@ -121,10 +103,10 @@ def main_menu():
 
               
         elif choice == "4": 
-            type = "hierarchy_all_ratios_hormones"
-            sex = 'male'
-            n_repeats = 400
-            ouput_directory = "F:/Ruti/AnalysisWithPython/"
+            type = data['4']['type']
+            sex = data['4']['sex']
+            n_repeats = data['4']['n_repeats']
+            ouput_directory = data['4']['output_directory']
             select_column_prob = 1
             title_file = sex + "_" + type + "_" + str(n_repeats)
             # Load the Pickle file
@@ -140,23 +122,24 @@ def main_menu():
                 total_data_filter_confusion.to_excel(writer, sheet_name='all_confusion_filter', index=False)
                 total_data_filter_all.to_excel(writer, sheet_name='final_data', index=False)
 
-            
-            
-            a=1
         elif choice == "5":
-                 type = "hierarchy_all_ratios"
-                 sex = "female"
+                 type = data['5']['type']
+                 sex = data['5']['sex']
+                 choice_m = data['5']['choice_m']
+                 n_repeats = data['5']['n_repeats']
+                 output_file =data['5']['data_file']
+                 index_initial_hormone = data['5']['index_begin'] -1
+                 index_final_hormone = data['5']['index_final'] 
+                 ouput_directory = data['5']['output_directory'] 
                  features = {}
-                 choice_m = "2"
-                 n_repeats = 400
-                
-                 output_file ='F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx'
+                 
                  data = pd.read_excel(output_file,sheet_name="All_data")
-                 hormones = hormones = data.iloc[:,7:88].columns.tolist()
+                 hormones =  data.iloc[:,index_initial_hormone:index_final_hormone].columns.tolist()
+                 
                  #models_list = ["SVC_linear","random_forest","logistic"] "SVC_rbf" doesnt work
                  #models_list = ["SVC_linear","random_forest","logistic", "decision_tree","k_neighbors","adaboost","qda"]
                  models_list = ["SVC_linear","random_forest","logistic", "decision_tree"]
-                 ouput_directory = "F:/Ruti/AnalysisWithPython/"
+                 
                  positive_feature = "alpha"
                  title_file = 'Better_features' + '_' + sex + "_" + type + "_" + str(n_repeats)
                  
@@ -171,20 +154,20 @@ def main_menu():
                  with open(ouput_directory + title_file + '.pkl', 'wb') as f:
                     pickle.dump(features, f)
                     
-        elif choice == "6": #for validation
-            type = "hierarchy_all_ratios_hormones"
-            train_file ='F:/Ruti/AnalysisWithPython/data_all_hormones_vs2.xlsx'
-            validation_file = 'F:/Ruti/fresh_Data/Hormones_Mice_ctrl_casp3_2F_1M_vs1.xlsx'
-            sex = 'male' #female or all
-            choice = "2"
-            n_repeats = 1
+        elif choice == "6": #for validation-do learning in all original file-and then check on the validation
+            type = data['6']['type']
+            train_file =data['6']['train_file']
+            validation_file = data['6']['validation_file']
+            sex = data['6']['sex']
+            choice = data['6']['choice']
+            n_repeats = data['6']['n_repeats']
+            
             columns_validation = ['sex','status','Prog','T','Cort','DHEA','AEA','AG',
                                   'OEA','SEA','PEA']
-
             hormones_list = ['Prog-T-Cort_to_T']
-            
             model = ["SVC_linear"]
             hormones_dict = {}
+            
             for count, h in enumerate(hormones_list):
               #convert h into list
               hormones = h.split('-')
@@ -192,11 +175,8 @@ def main_menu():
                                               columns_validation)
               results_dict = new_obj(model[count] ,n_repeats, sex , choice , hormones)
               hormones_dict[h] = results_dict
-            a=1       
-        elif choice == "7":
-            
-            
-            break
+                 
+      
         else:
             print("Invalid choice. Please try again.")
 
@@ -204,4 +184,7 @@ def main_menu():
 
 
 if __name__ == "__main__":
-    main_menu()
+    with open("settings.yml", "r") as file:
+        data = yaml.safe_load(file)
+    choice = data['choice']    
+    main_menu(choice,data)

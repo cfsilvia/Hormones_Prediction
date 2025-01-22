@@ -4,8 +4,8 @@ import seaborn as sns
 import matplotlib
 import pandas as pd
 from matplotlib.lines import Line2D
-matplotlib.use('TkAgg') 
-plt.ion() # Turn on the interactive mode
+#matplotlib.use('TkAgg') 
+#plt.ion() # Turn on the interactive mode
 
 
 class plot_data:
@@ -62,7 +62,7 @@ class plot_data:
       fig.suptitle('Histogram'+ '  ' + self.title, x=0.5, y=0.99) 
       plt.savefig(self.output_directory + self.title + '_Histogram_Probability' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
-      plt.show()
+      #plt.show()
             
                 
 
@@ -109,7 +109,7 @@ class plot_data:
        fig.suptitle('Precision: TP/(TP+FP)'+ '  ' + self.title, x=0.5, y=0.99) 
        plt.savefig(self.output_directory + self.title + '_precision' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
-       plt.show()
+       #plt.show()
             
     '''
     input:
@@ -144,7 +144,7 @@ class plot_data:
        fig.suptitle('Accuracy: '+ '  ' + self.title, x=0.5, y=0.99) 
        plt.savefig(self.output_directory + self.title + '_accuracy' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
-       plt.show()
+       #plt.show()
             
     '''
     input:
@@ -182,7 +182,7 @@ class plot_data:
       fig.suptitle('Recall: TP/(TP+FN)'+ '  ' + self.title, x=0.5, y=0.99) 
       plt.savefig(self.output_directory + self.title + '_recall' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
-      plt.show()
+      #plt.show()
     '''
     input:
     output: plot confusion matrix
@@ -224,7 +224,7 @@ class plot_data:
         
         fig.suptitle('Confusion matrix'+ '  ' + self.title, x=0.5, y=0.99)
         plt.savefig(self.output_directory + self.title + '.pdf', format='pdf',dpi=300, bbox_inches='tight')
-        plt.show()
+       # plt.show()
         
         
     '''
@@ -262,7 +262,7 @@ class plot_data:
       fig.suptitle('f-score: 2X(precxrecall)/(prec+recall)'+ '  ' + self.title, x=0.5, y=0.99) 
       plt.savefig(self.output_directory + self.title + '_fscore' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
       # Show the plot
-      plt.show()
+      #plt.show()
                 
     '''
     input:
@@ -310,7 +310,7 @@ class plot_data:
        fig.suptitle('Hist_accuracy'+ '  ' + self.title, x=0.5, y=0.99) 
        plt.savefig(self.output_directory + self.title + '_Histogram_Accuracy_truevsrandom' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
-       plt.show()  
+       #plt.show()  
        
     '''
        input: dictionary
