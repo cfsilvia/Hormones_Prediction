@@ -20,12 +20,12 @@ class plot_data:
     def plot_prob(self,  hormone_dict,select_column_prob):
       num_keys = len(hormone_dict)
       num_items = [len(v) for v in hormone_dict.values()]
-      fig, axs = plt.subplots(num_keys , max(num_items), figsize=(20, 40)) #good 60
+      fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1), figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60 figsize=(20, 40)
       fig.subplots_adjust(hspace=1, wspace=0.3)  # Adjust space between subplots
 
         # turn off the axes
-      for i in range(num_keys):
-           for j in range(max(num_items)):
+      for i in range((num_keys+1)):
+           for j in range((max(num_items)+1)):
                axs[i,j].set_axis_off()
        
       for i, (h, list_models) in enumerate(hormone_dict.items()):
@@ -81,12 +81,12 @@ class plot_data:
     def plot_precision(self, hormone_dict):
        num_keys = len(hormone_dict)
        num_items = [len(v) for v in hormone_dict.values()]
-       fig, axs = plt.subplots(num_keys , max(num_items), figsize=(10, 20)) #good 60
+       fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
        fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
         # turn off the axes
-       for i in range(num_keys):
-           for j in range(max(num_items)):
+       for i in range((num_keys+1)):
+           for j in range((max(num_items)+1)):
                axs[i,j].set_axis_off()
        
        for i, (h, list_models) in enumerate(hormone_dict.items()):
@@ -106,7 +106,7 @@ class plot_data:
                 axs[i,j].set_ylim(0, 120)
         
        fig.tight_layout(pad=5)
-       fig.suptitle('Precision: TP/(TP+FP)'+ '  ' + self.title, x=0.5, y=0.99) 
+       fig.suptitle('Precision: TP/(TP+FN)'+ '  ' + self.title, x=0.5, y=0.99) 
        plt.savefig(self.output_directory + self.title + '_precision' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
        #plt.show()
@@ -118,12 +118,12 @@ class plot_data:
     def plot_accuracy(self, hormone_dict):
        num_keys = len(hormone_dict)
        num_items = [len(v) for v in hormone_dict.values()]
-       fig, axs = plt.subplots(num_keys , max(num_items), figsize=(10, 20)) #good 60
+       fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
        fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
        # turn off the axes
-       for i in range(num_keys):
-           for j in range(max(num_items)):
+       for i in range((num_keys+1)):
+           for j in range((max(num_items)+1)):
                axs[i,j].set_axis_off()
                
        for i, (h, list_models) in enumerate(hormone_dict.items()):
@@ -135,7 +135,7 @@ class plot_data:
                 #get classes
                 class_names = self.data[h][m]['classes']
                 #bar plot
-                axs[i,j].bar("alpha_submissive", array_mean.tolist(), color=['skyblue'], edgecolor = 'black',width = 0.01)
+                axs[i,j].bar("two_classes", array_mean.tolist(), color=['skyblue'], edgecolor = 'black',width = 0.01)
                 axs[i,j].set_title(h + '\n' + m, fontsize = 7, color='red')
                 axs[i, j].set_ylabel("Accuracy % ", fontsize = 8) 
                 axs[i,j].set_ylim(0, 120)
@@ -153,12 +153,12 @@ class plot_data:
     def plot_recall(self, hormone_dict):
       num_keys = len(hormone_dict)
       num_items = [len(v) for v in hormone_dict.values()]
-      fig, axs = plt.subplots(num_keys , max(num_items), figsize=(10, 20)) #good 60
+      fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
       fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
         # turn off the axes
-      for i in range(num_keys):
-           for j in range(max(num_items)):
+      for i in range((num_keys+1)):
+           for j in range((max(num_items)+1)):
                axs[i,j].set_axis_off()
        
       for i, (h, list_models) in enumerate(hormone_dict.items()):
@@ -179,7 +179,7 @@ class plot_data:
                 axs[i,j].set_ylim(0, 120)
        
       fig.tight_layout(pad=5)
-      fig.suptitle('Recall: TP/(TP+FN)'+ '  ' + self.title, x=0.5, y=0.99) 
+      fig.suptitle('Recall: TP/(TP+FP)'+ '  ' + self.title, x=0.5, y=0.99) 
       plt.savefig(self.output_directory + self.title + '_recall' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
       #plt.show()
@@ -191,12 +191,12 @@ class plot_data:
         num_keys = len(hormone_dict)
         num_items = [len(v) for v in hormone_dict.values()]
         
-        fig, axs = plt.subplots(num_keys , max(num_items), figsize=(10, 20)) #good 60
+        fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
         fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
         # turn off the axes
-        for i in range(num_keys):
-           for j in range(max(num_items)):
+        for i in range((num_keys+1)):
+           for j in range((max(num_items)+1)):
                axs[i,j].set_axis_off()
         
         #fig, axs = plt.subplots(len(hormones), len(models), figsize=(20, 15))
@@ -223,7 +223,7 @@ class plot_data:
         fig.tight_layout(pad=5)
         
         fig.suptitle('Confusion matrix'+ '  ' + self.title, x=0.5, y=0.99)
-        plt.savefig(self.output_directory + self.title + '.pdf', format='pdf',dpi=300, bbox_inches='tight')
+        plt.savefig(self.output_directory + self.title + '_confusion_matrix.pdf', format='pdf',dpi=300, bbox_inches='tight')
        # plt.show()
         
         
@@ -234,12 +234,12 @@ class plot_data:
     def plot_f1score(self, hormone_dict):
       num_keys = len(hormone_dict)
       num_items = [len(v) for v in hormone_dict.values()]
-      fig, axs = plt.subplots(num_keys , max(num_items), figsize=(10, 20)) #good 60
+      fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
       fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
         # turn off the axes
-      for i in range(num_keys):
-           for j in range(max(num_items)):
+      for i in range((num_keys+1)):
+           for j in range((max(num_items)+1)):
                axs[i,j].set_axis_off()
        
       for i, (h, list_models) in enumerate(hormone_dict.items()):
@@ -306,7 +306,7 @@ class plot_data:
                 axs[i,j].set_ylabel("Counts")
                 j += 1
             i += 1
-       fig.tight_layout(pad=8)
+       fig.tight_layout(pad=5)
        fig.suptitle('Hist_accuracy'+ '  ' + self.title, x=0.5, y=0.99) 
        plt.savefig(self.output_directory + self.title + '_Histogram_Accuracy_truevsrandom' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
@@ -448,13 +448,13 @@ class plot_data:
         dict_hormones_models = self.create_dict(total_data_filter_all)
         #plot relevant data
        
-        
-        self.plot_confusion_matrix(dict_hormones_models)
-        self.plot_precision(dict_hormones_models)
-        self.plot_recall(dict_hormones_models)
-        self.plot_f1score(dict_hormones_models)
-        self.plot_accuracy(dict_hormones_models)
-        self.plot_prob(dict_hormones_models,select_column_prob)
+        if not total_data_filter_all.empty:
+          self.plot_confusion_matrix(dict_hormones_models)
+          self.plot_precision(dict_hormones_models)
+          self.plot_recall(dict_hormones_models)
+          self.plot_f1score(dict_hormones_models)
+          self.plot_accuracy(dict_hormones_models)
+          self.plot_prob(dict_hormones_models,select_column_prob)
       #  self.plot_boot_histograms(hormones,models)
 
 

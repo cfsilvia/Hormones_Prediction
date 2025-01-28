@@ -7,12 +7,12 @@
   columns_to_extract : [0,1,2,3,4,5,6,64,65,66,67,68,69,70,71,72] #include basic data plus  hormones -remember one is zero
 #Predict hierarchy
 '2':
-  data_features: F:/Ruti/AnalysisWithPython/Better_features_male_hierarchy_all_ratios_400.pkl
-  data_file: F:\Ruti\AnalysisWithPython\data_to_use_complete.xlsx
+  data_features: /home/labs/kimchi/cfsilvia/Data/Better_features_male_hierarchy_part_ratios_hormones_400.pkl
+  data_file: /home/labs/kimchi/cfsilvia/Data/data_to_use_complete_without.xlsx
   n_repeats: 400
-  output_directory: F:/Ruti/AnalysisWithPython/
+  output_directory: /home/labs/kimchi/cfsilvia/Data/
   sex: male #male, female or all
-  type: hierarchy_all_ratios
+  type: hierarchy_part_ratios
 #Predict personality
 '3':
   data_features: F:/Ruti/AnalysisWithPython/Better_features_male_hierarchy_all_ratios_400.pkl
@@ -29,14 +29,14 @@
   type: hierarchy_all_ratios_hormones
 #Find better features for each model  
 '5':
-  choice_m: '2' #select if the choice is hierarchy or personality
-  data_file: F:/Ruti/AnalysisWithPython/data_to_use_complete.xlsx
+  choice_m: '3' #select if the choice is hierarchy or personality
+  data_file: /home/labs/kimchi/cfsilvia/Data/data_hormones/data_to_use_pareto_without_hormones.xlsx
   n_repeats: 400
-  sex: female # male, female or all
-  type: hierarchy_all_ratios
-  index_begin : 7 #first index from the excel file with hormones
-  index_final : 88 #final index from the excel file with hormones
-  output_directory: F:/Ruti/AnalysisWithPython/  
+  sex: male # male, female or all
+  type: I_status
+  index_begin : 8 #first index from the excel file with hormones
+  index_final : 52 #final index from the excel file with hormones
+  output_directory: /home/labs/kimchi/cfsilvia/Data/data_hormones/ 
 #Evaluate validation data  
 '6':
   choice: '2' #select if the choice is hierarchy-2 or personality-3
@@ -48,4 +48,4 @@
    
 
 #select your choice
-choice: '1'
+choice: '5'

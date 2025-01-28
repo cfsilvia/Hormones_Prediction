@@ -186,7 +186,7 @@ def main_menu(choice,data):
 
 
 if __name__ == "__main__":
-    with open("settings.yml", "r") as file:
+    with open("/home/labs/kimchi/cfsilvia/Data/settings.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    
     main_menu(choice,data)
