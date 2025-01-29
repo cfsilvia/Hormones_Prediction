@@ -163,11 +163,11 @@ def main_menu(choice,data):
             sex = data['6']['sex']
             choice = data['6']['choice']
             n_repeats = data['6']['n_repeats']
+            output_file = data['6']['output_file']
             
-            columns_validation = ['sex','status','Prog','T','Cort','DHEA','AEA','AG',
-                                  'OEA','SEA','PEA']
-            hormones_list = ['Prog-T-Cort_to_T']
-            model = ["SVC_linear"]
+            columns_validation = data['6']['columns_validation']
+            hormones_list =data['6']['hormones_list']
+            model = data['6']['model']
             hormones_dict = {}
             
             for count, h in enumerate(hormones_list):
@@ -177,6 +177,11 @@ def main_menu(choice,data):
                                               columns_validation)
               results_dict = new_obj(model[count] ,n_repeats, sex , choice , hormones)
               hormones_dict[h] = results_dict
+              
+              #save as data frame
+            df= pd.DataFrame(hormones_dict)
+            df.to_excel(output_file)
+            
                  
       
         else:

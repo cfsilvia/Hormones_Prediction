@@ -129,6 +129,8 @@ class treat_validation_data:
         validation_data = self.arrange_validation()
         #arrange train data
         if choice == "2":
+            #remove blank spaces of column names of sel.data_train
+            self.data_train.columns = self.data_train.columns.str.replace(r'\s+', '', regex=True)
             selected_data_train = self.select_data(self.data_train,sex, choice, hormones)
             selected_data_validation = self.select_data(validation_data,sex, choice, hormones)
         elif choice == "3":
@@ -156,7 +158,7 @@ class treat_validation_data:
         results_dict['model'] = model_name
         results_dict['prob'] = probabilities
         results_dict['labels_pred'] = y_pred
-        results_dict['true_labels'] = y_val
+        results_dict['true_labels'] = y_val.tolist()
         results_dict['confusion_matrix'] = cm
         results_dict['accuracy'] = accuracy
         results_dict['precision'] = precision
