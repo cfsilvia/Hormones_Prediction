@@ -4,6 +4,8 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from learning_data import learning_data
+from sklearn.model_selection import GroupShuffleSplit
+from Find_better_features import Find_better_features
 
 class treat_data:
     def __init__(self,output_file):
@@ -26,9 +28,14 @@ class treat_data:
           
         #select hormones and status
         if choice == "2":
+            #add a columns to distinguish each arena experiment with numbers, beggining from 1
+            selected_data['groups'] = pd.factorize(selected_data['Experiment'])[0] + 1
             selection = hormones[:] #creates a shallow copy
             selection.append('status')
+            selection.append('groups')
             selected_data = selected_data.loc[:,selection]
+            
+            
         elif choice == "3":
              selection = hormones[:]
              selection.append(architype)
@@ -37,15 +44,35 @@ class treat_data:
    
     '''
       input :data
-      output: split data 70% 30%-regular
+      output: split data 70% 30%-for personalty
+              consider the data of the same experiment to be together during the splitting
       '''
-    def split_data(self,data):
-          X = data.iloc[:,0:(data.shape[1]-1)]
-          y = data.iloc[:,(data.shape[1]-1)]
-          X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3,
+    def split_data(self,data,choice):
+        
+        
+        if choice == "3":
+            X = data.iloc[:,0:(data.shape[1]-1)]
+            y = data.iloc[:,(data.shape[1]-1)]
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3,
                                                               stratify=y, shuffle=True, 
                                                               random_state=np.random.randint(1000))
-          return X_train, X_test, y_train, y_test
+        elif choice == "2":
+          X = data.iloc[:,0:(data.shape[1]-2)]
+          y = data.iloc[:,(data.shape[1]-2)]
+          # Define the splitter
+          gss = GroupShuffleSplit(n_splits=1, test_size=0.3,random_state=np.random.randint(1000)) 
+          # Perform the split
+          train_idx, test_idx = next(gss.split(X, y, data['groups']))
+          # Split the data
+          X_train, X_test = X.iloc[train_idx.tolist()], X.iloc[test_idx.tolist()]
+          y_train, y_test = y.iloc[train_idx.tolist()], y.iloc[test_idx.tolist()]
+          
+          print("Train groups:", np.unique((data['groups']).iloc[train_idx.tolist()]))
+          print("Test groups:", np.unique((data['groups']).iloc[test_idx.tolist()]))
+          
+          a=1
+          
+        return X_train, X_test, y_train, y_test
     '''
     input = train and test features data
     output = normalized train data , and test data normalize as train data
@@ -118,7 +145,7 @@ class treat_data:
     input: selected data
     output : after splitting and learning get dictionary 
     '''
-    def train_learning(self,selected_data, model=None,n_repeats = None):
+    def train_learning(self,selected_data, model_name=None,n_repeats = None,choice = None):
          #create dictionary of the results
          results_dict = {}
          prob = []
@@ -138,7 +165,7 @@ class treat_data:
          
          for count in range(n_repeats):
             #get train  and test data
-            X_train, X_test, y_train, y_test =self.split_data(selected_data)
+            X_train, X_test, y_train, y_test =self.split_data(selected_data,choice)
             #normalize the train data-use normalization for test data
             X_train_scaled, X_test_scaled = self.normalization(X_train,X_test)
             #balance the train data by using smote
@@ -148,8 +175,19 @@ class treat_data:
             
             y_test, classes = self.label_encoded(y_test)
             classes = list(classes)
+            
+             #select features for Xtrain
+            features_obj = Find_better_features(X_train_resampled,y_train_resampled)
+            selected_features = features_obj(model_name)
+             
+            
+            
             #learn the system
             new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model)
+           
+            
+            
+            
             #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
             probabilities, accuracy,y_pred, classes_num,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2,model_params  = new_obj()
             prob.append(probabilities)
@@ -198,7 +236,7 @@ class treat_data:
          elif choice == "3":
             selected_data = self.select_data(sex, choice, hormones,architype)
             
-         results_dict = self.train_learning(selected_data, model,n_repeats)
+         results_dict = self.train_learning(selected_data, model,n_repeats,choice)
          
          return results_dict   
          # if it is required randomize the data

@@ -1,5 +1,5 @@
 import pandas as pd
-from treat_data import treat_data
+
 from learning_data import learning_data
 from sklearn.feature_selection import RFECV
 from sklearn.metrics import make_scorer, f1_score
@@ -11,10 +11,10 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class Find_better_features:
-    def __init__(self,output_file,positive_feature):
-         self.output_file = output_file
-         self.data = pd.read_excel(output_file,sheet_name="All_data")
-         self.positive_feature = positive_feature
+    def __init__(self,X_train, y_train):
+        self.X_train = X_train
+        self.y_train = y_train
+       
     '''
     input: list of features
     output: order features 
@@ -60,49 +60,20 @@ class Find_better_features:
         
        
          
-    def __call__(self,model_name = None,n_repeats = None, sex = None, choice = None, hormones = None, type = None,architype = None):       
-         
-        #select data to work with
-        new_obj = treat_data(self.output_file)
-        if choice == "2":
-            selected_data = new_obj.select_data(sex, choice, hormones)
-        elif choice == "3":
-            architype = type
-            selected_data = new_obj.select_data(sex, choice, hormones,architype)
-        list_features = list()
-        
-        for count in range(n_repeats):
-            #get train  and test data
-            X_train, X_test, y_train, y_test = new_obj.split_data(selected_data)
-            #normalize the train data-use normalization for test data
-            X_train_scaled, X_test_scaled = new_obj.normalization(X_train,X_test)
-            #balance the train data by using smote
-            X_train_resampled, y_train_resampled = new_obj.balance_data(X_train_scaled,y_train)
-            #Convert the categorical data into binary
-            y_train_resampled,classes = new_obj.label_encoded(y_train_resampled)
-            y_test, classes = new_obj.label_encoded(y_test)
-            #find the model
-            new_obj_learn = learning_data(X_train_resampled, X_test_scaled, y_train_resampled,y_test,model_name)
-            model = new_obj_learn.train_model()
-            
-           
-            
-            
-            # Step 4: Apply RFECV on the training data
+    def __call__(self,model_name = None):       
+       
+        # Step 4: Apply RFECV on the training data
             try:
+                #get model object
+                model = learning_data.model_definition(model_name)
                 # Specify 'I' as the positive class
                 f1_scorer = make_scorer(f1_score, pos_label= 1)
                 rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,shuffle=True,random_state=42), scoring=f1_scorer, n_jobs = -1)
-                rfecv.fit(X_train_resampled, y_train_resampled)
-                selected_features = X_train.columns[rfecv.support_]
-                # Results append to list
-                list_features.append(selected_features.tolist())
-                
+                rfecv.fit(self.X_train, self.y_train)
+                selected_features = self.X_train.columns[rfecv.support_]
                 print("Optimal number of features:", rfecv.n_features_)
                 print("Selected features:", selected_features)
             except Exception as e:
                 print(f"An error ocurred: {e}")
         
-        final_features = Find_better_features.order_features(list_features)    
-
-        return final_features
+            return selected_features

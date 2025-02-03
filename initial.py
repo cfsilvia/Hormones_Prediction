@@ -28,39 +28,27 @@ def main_menu(choice,data):
             type = data['2']['type'] 
             output_file =data['2']['data_file']
             sex = data['2']['sex'] #female or all
-            input_file = data['2']['data_features']
             n_repeats = data['2']['n_repeats']
             ouput_directory = data['2']['output_directory']
-            randomization = False # in the case want to randomize the classification
-            num_permutations = 3 
-            
-            hormones_combination = Find_better_features.get_best_combinations(input_file)
+            index_hormones = data['2']['index_hormones']
+            #hormones to use
+            table = pd.read_excel(output_file,sheet_name="All_data")
+            aux = table.columns
+            hormones_combination = aux[index_hormones].tolist()
+           
             title_file = sex + "_" + type + "_" + str(n_repeats)
            #for randomization
             #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
-            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
+            #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
+            list_models = ["SVC_linear","random_forest","logistic", "decision_tree"]
             hormones_dict = {} #for each hormone dict there are different models dict and each one has the results in the form of dict
-           
-            if randomization:
-                for count in range(len(hormones_combination)):
-                    model_dict ={}
-                    for model in list_models:
-                        new_obj = treat_random_data(output_file)
-                        results_dict = treat_random_data._call_(new_obj,model, n_repeats,num_permutations,sex,choice,hormones_combination[count])
-                        model_dict[model] = results_dict # for each model there is a dictionary
-                        key_hormones = "-".join(hormones_combination[count])
-                        hormones_dict[key_hormones] = model_dict
-                        a=1
+
+            model_dict ={}
+            
                     
-               
-            else:
-                #loop to ge several hormone combinations
-                for count in range(len(hormones_combination)):
-                    model_dict ={}
-                    
-                    for model in list_models:
+            for model in list_models:
                         new_obj = treat_data(output_file)
-                        results_dict = new_obj(model, n_repeats,sex,choice,hormones_combination[count])
+                        results_dict = new_obj(model, n_repeats,sex,choice,hormones_combination)
                         model_dict[model] = results_dict # for each model there is a dictionary
                         key_hormones = "-".join(hormones_combination[count])
                         hormones_dict[key_hormones] = model_dict

@@ -16,6 +16,6 @@ train_idx, test_idx = next(gss.split(X, y, groups))
 X_train, X_test = X[train_idx], X[test_idx]
 y_train, y_test = y[train_idx], y[test_idx]
 
-print("Train groups:", np.unique(groups[train_idx]))
-print("Test groups:", np.unique(groups[test_idx]))
+
+
 a=1

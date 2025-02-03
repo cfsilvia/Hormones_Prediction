@@ -15,6 +15,7 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.metrics import mean_squared_error, r2_score
 
 
+
 class learning_data:
     def __init__(self,X_train,X_test,y_train, y_test,model):
         self.X_train = X_train
@@ -132,7 +133,34 @@ class learning_data:
         
         return X_bootstrap, y_bootstrap_permuted
     
-    
+    '''
+    input: model name
+    output: object of the model
+    '''
+    @staticmethod
+    def model_definition(model_name):
+        if model_name == "SVC_linear":
+         model = SVC(kernel='linear', probability=True,random_state=42)    
+        elif model_name == "SVC_rbf":
+         model = SVC(kernel='rbf',probability=True)
+        elif model_name == "random_forest":
+          model = RandomForestClassifier(n_estimators = 200, random_state=42) 
+          #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
+        elif model_name == "logistic":
+          model = LogisticRegression(max_iter=1000, random_state=42)
+        elif model_name == 'decision_tree':
+          model = DecisionTreeClassifier(random_state=42)
+        elif model_name == "k_neighbors":
+          model = KNeighborsClassifier(n_neighbors=5)
+        elif model_name == "adaboost":
+          model = AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=1), n_estimators=50, random_state=42)
+        elif model_name == "qda":
+          model = QuadraticDiscriminantAnalysis()
+        elif model_name == "GaussianNB":
+           model = GaussianNB()
+        
+        return model
+           
     
 
     def __call__(self):
