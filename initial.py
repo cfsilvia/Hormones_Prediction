@@ -29,8 +29,8 @@ def main_menu(choice,data):
             output_file =data['2']['data_file']
             sex = data['2']['sex'] #female or all
             n_repeats = data['2']['n_repeats']
-            ouput_directory = data['2']['output_directory']
             index_hormones = data['2']['index_hormones']
+            output_directory = data['2']['output_directory']
             #hormones to use
             table = pd.read_excel(output_file,sheet_name="All_data")
             aux = table.columns
@@ -40,8 +40,9 @@ def main_menu(choice,data):
            #for randomization
             #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
             #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
-            list_models = ["SVC_linear","random_forest","logistic", "decision_tree"]
-            hormones_dict = {} #for each hormone dict there are different models dict and each one has the results in the form of dict
+            list_models = ["logistic","random_forest", "decision_tree","SVC_linear"]
+            #list_models = ["logistic","SVC_linear",]
+           
 
             model_dict ={}
             
@@ -49,14 +50,14 @@ def main_menu(choice,data):
             for model in list_models:
                         new_obj = treat_data(output_file)
                         results_dict = new_obj(model, n_repeats,sex,choice,hormones_combination)
+                        print(model)
                         model_dict[model] = results_dict # for each model there is a dictionary
-                        key_hormones = "-".join(hormones_combination[count])
-                        hormones_dict[key_hormones] = model_dict
-                        
+                        a=1
+                       
                     
             # # Save the dictionary
-            with open(ouput_directory + title_file + '.pkl', 'wb') as f:
-                pickle.dump(hormones_dict, f)
+            with open(output_directory + title_file + '.pkl', 'wb') as f:
+                pickle.dump(model_dict, f)
                 
      
         
@@ -109,8 +110,8 @@ def main_menu(choice,data):
             
             with pd.ExcelWriter(ouput_directory + title_file  + '.xlsx') as writer:
                 total_data.to_excel(writer, sheet_name='all_predictions', index=False)
-                total_data_filter_confusion.to_excel(writer, sheet_name='all_confusion_filter', index=False)
-                total_data_filter_all.to_excel(writer, sheet_name='final_data', index=False)
+               # total_data_filter_confusion.to_excel(writer, sheet_name='all_confusion_filter', index=False)
+                #total_data_filter_all.to_excel(writer, sheet_name='final_data', index=False)
 
         elif choice == "5":
                  type = data['5']['type']
@@ -179,7 +180,7 @@ def main_menu(choice,data):
 
 
 if __name__ == "__main__":
-    with open("/home/labs/kimchi/cfsilvia/Data/settings.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
+    with open("Z:/cfsilvia/Data/settings_windows.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    
     main_menu(choice,data)

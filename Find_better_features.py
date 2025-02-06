@@ -11,9 +11,10 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class Find_better_features:
-    def __init__(self,X_train, y_train):
+    def __init__(self,X_train, y_train,X_train_original):
         self.X_train = X_train
         self.y_train = y_train
+        self.X_train_with_columns = X_train_original
        
     '''
     input: list of features
@@ -68,12 +69,13 @@ class Find_better_features:
                 model = learning_data.model_definition(model_name)
                 # Specify 'I' as the positive class
                 f1_scorer = make_scorer(f1_score, pos_label= 1)
-                rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,shuffle=True,random_state=42), scoring=f1_scorer, n_jobs = -1)
+                #do ten folds splitting
+                rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,shuffle=True), scoring=f1_scorer, n_jobs = -1)
                 rfecv.fit(self.X_train, self.y_train)
-                selected_features = self.X_train.columns[rfecv.support_]
+                selected_features = self.X_train_with_columns.columns[rfecv.support_]
                 print("Optimal number of features:", rfecv.n_features_)
                 print("Selected features:", selected_features)
             except Exception as e:
                 print(f"An error ocurred: {e}")
         
-            return selected_features
+            return selected_features,rfecv.support_

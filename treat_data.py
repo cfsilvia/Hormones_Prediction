@@ -6,6 +6,7 @@ from sklearn.preprocessing import StandardScaler
 from learning_data import learning_data
 from sklearn.model_selection import GroupShuffleSplit
 from Find_better_features import Find_better_features
+from collections import defaultdict
 
 class treat_data:
     def __init__(self,output_file):
@@ -59,16 +60,21 @@ class treat_data:
         elif choice == "2":
           X = data.iloc[:,0:(data.shape[1]-2)]
           y = data.iloc[:,(data.shape[1]-2)]
-          # Define the splitter
-          gss = GroupShuffleSplit(n_splits=1, test_size=0.3,random_state=np.random.randint(1000)) 
-          # Perform the split
-          train_idx, test_idx = next(gss.split(X, y, data['groups']))
-          # Split the data
-          X_train, X_test = X.iloc[train_idx.tolist()], X.iloc[test_idx.tolist()]
-          y_train, y_test = y.iloc[train_idx.tolist()], y.iloc[test_idx.tolist()]
           
-          print("Train groups:", np.unique((data['groups']).iloc[train_idx.tolist()]))
-          print("Test groups:", np.unique((data['groups']).iloc[test_idx.tolist()]))
+          X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3,
+                                                                stratify=y, shuffle=True, 
+                                                                random_state=np.random.randint(1000))
+          
+          # # Define the splitter according groups
+          # gss = GroupShuffleSplit(n_splits=1, test_size=0.3,random_state=np.random.randint(1000)) 
+          # # Perform the split
+          # train_idx, test_idx = next(gss.split(X, y, data['groups']))
+          # # Split the data
+          # X_train, X_test = X.iloc[train_idx.tolist()], X.iloc[test_idx.tolist()]
+          # y_train, y_test = y.iloc[train_idx.tolist()], y.iloc[test_idx.tolist()]
+          
+          # print("Train groups:", np.unique((data['groups']).iloc[train_idx.tolist()]))
+          # print("Test groups:", np.unique((data['groups']).iloc[test_idx.tolist()]))
           
           a=1
           
@@ -99,6 +105,7 @@ class treat_data:
         k_neighbors = np.sum(y == classifies[1]) -1
         
       #with auto balanced exactly the 2 populations
+      #smote = SMOTE(sampling_strategy='auto', k_neighbors = k_neighbors)
       smote = SMOTE(sampling_strategy='auto', k_neighbors = k_neighbors, random_state = 42) #take 4 since minority group is 5, 42 for reproducible
       #smote = SMOTE(sampling_strategy='auto', k_neighbors = k_neighbors) 
       X_resampled, y_resampled = smote.fit_resample(X, y) 
@@ -124,23 +131,80 @@ class treat_data:
       
       return ydata_labeled, sorted_labels
     
-    # '''
-    # input: original data
-    # output: after randomization
-    # '''
-    # def randomize_data(self,data):
+    '''
+    input : list of features
+    output: get unique list of features together with a list of frequencies for each list, in addition
+            a dictionary with a list of index for each feature
+    '''
+    @staticmethod
+    def  find_unique_features(lists):
+       unique_lists = []
+       frequencies = []
+       indices_dict = {} #for storing the indices for each feature
+       seen = set()
+       for i, lst in enumerate(lists):
+         t=tuple(lst)
+         if t not in seen:
+           seen.add(t)
+           unique_lists.append(lst)
+           frequencies.append(1)
+           indices_dict[t] = [i]
+         else:
+           frequencies[unique_lists.index(lst)] += 1
+           indices_dict[t].append(i)
+       return unique_lists, frequencies, indices_dict
+     
+    '''
+     input: unique features with respective index of original list and frequency
+     output: filter features with corresponding index in the original list, filter according to a frequency larger than 3 
+     '''
+    @staticmethod
+    def filter_data(unique_lists, frequencies, indices_dict):
+        filtered_lists = []
+        filtered_frequencies = []
+        filtered_indices_dict = {}
         
-    #     # Bootstrap sample
-    #     indices = np.random.choice(range(data.shape[0]), size=data.shape[0], replace=False)
-    #     data_bootstrap = data.iloc[indices,:]
-    #     data_bootstrap_permutated = data_bootstrap.copy()
+        for lst, freq  in zip(unique_lists, frequencies):
+            t= tuple(lst)
+            if freq > 100: #keep only  features which appear more than 3 times or 2%
+              filtered_lists.append(lst)
+              filtered_frequencies.append(freq)
+              filtered_indices_dict[t] = indices_dict[t]
         
-    #     # Permute labels to eliminate correlation
-    #     labels_permutated = np.random.permutation(data_bootstrap.iloc[:,data_bootstrap.shape[1]-1])
-    #     data_bootstrap_permutated.iloc[:,data_bootstrap.shape[1]-1] = labels_permutated
+
+        return filtered_lists,filtered_frequencies, filtered_indices_dict
+    '''
+    input: dictionary
+    output: new dictionary  with key the selected feature , list ofthe parameters
+    '''
+    @staticmethod  
+    def get_dictionary_with_features(data_dict, features,indices_dict,frequencies):
+      results =  defaultdict(dict)
+      #sort features according to frequencies in descending order
+      sorted_pairs = sorted(zip(frequencies,features), reverse = True)
+      frequencies, features = zip(*sorted_pairs)
+      for i,lst in enumerate(features):
+        t = tuple(lst)
+        results[t]['classes'] = data_dict['classes']
+        results[t]['repetition_feature'] = frequencies[i]
+        results[t]['prob'] = treat_data.get_selected_data(data_dict['prob'],indices_dict[t])
+        results[t]['labels_pred'] = treat_data.get_selected_data(data_dict['labels_pred'],indices_dict[t])
+        results[t]['confusion_matrix'] = treat_data.get_selected_data(data_dict['confusion_matrix'],indices_dict[t])
+        results[t]['accuracy'] = treat_data.get_selected_data(data_dict['accuracy'],indices_dict[t])
+        results[t]['precision'] = treat_data.get_selected_data(data_dict['precision'],indices_dict[t])
+        results[t]['recall'] = treat_data.get_selected_data(data_dict['recall'],indices_dict[t])
+        results[t]['fscore'] = treat_data.get_selected_data(data_dict['fscore'],indices_dict[t])
         
-    #     return data_bootstrap_permutated
+      return results
     
+    '''
+    auxiliary method
+    '''  
+    @staticmethod
+    def get_selected_data(parameter,indices):
+       selected_data = [parameter[i] for i in indices]
+       return selected_data
+      
     '''
     input: selected data
     output : after splitting and learning get dictionary 
@@ -148,21 +212,8 @@ class treat_data:
     def train_learning(self,selected_data, model_name=None,n_repeats = None,choice = None):
          #create dictionary of the results
          results_dict = {}
-         prob = []
-         labels_pred = []
-         confusion_matrix = []
-         acc = []
-         prec = []
-         rec = []
-         roc_auc1 = []
-         fpr1 = []
-         tpr1 = []
-         fscore = []
-         mean_s_error = []
-         r_square = []
-         accuracy_boot_perm = []
-         save_model = []
-         
+         prob , labels_pred , confusion_matrix , acc , prec ,rec , fscore, features = [], [], [], [], [], [], [],[]
+
          for count in range(n_repeats):
             #get train  and test data
             X_train, X_test, y_train, y_test =self.split_data(selected_data,choice)
@@ -174,56 +225,34 @@ class treat_data:
             y_train_resampled, classes = self.label_encoded(y_train_resampled)
             
             y_test, classes = self.label_encoded(y_test)
-            classes = list(classes)
+            classes_real = list(classes)
             
              #select features for Xtrain
-            features_obj = Find_better_features(X_train_resampled,y_train_resampled)
-            selected_features = features_obj(model_name)
-             
+            features_obj = Find_better_features(X_train_resampled,y_train_resampled,X_train)
+            selected_features, index_features = features_obj(model_name)
             
-            
-            #learn the system
-            new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model)
-           
-            
-            
+            #learn the system take relevant features
+            new_obj = learning_data(X_train_resampled[:,index_features],X_test_scaled[:,index_features],y_train_resampled, y_test,model_name)
+
             
             #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
-            probabilities, accuracy,y_pred, classes_num,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2,model_params  = new_obj()
-            prob.append(probabilities)
-            labels_pred.append(y_pred)
-            confusion_matrix.append(cm)
-            acc.append(accuracy)
-            prec.append(precision)
-            rec.append(recall)
-            roc_auc1.append(roc_auc)
-            fpr1.append(fpr)
-            tpr1.append(tpr)
-            fscore.append(f1)
-            mean_s_error.append(mse)
-            r_square.append(r2)
-            save_model.append(model_params)
-           # accuracy_boot_perm.append(accuracies_bootstraps)
+            probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = new_obj()
+            a=1
+            prob.append(probabilities_test), labels_pred.append(y_pred_test), confusion_matrix.append(cm_test), acc.append(accuracy_test),prec.append(precision_test), rec.append(recall_test), 
+            fscore.append(f1_test), features.append(selected_features.tolist())
+            print("round:", count)
             
-         results_dict['classes'] = classes
-         results_dict['model'] = model
-         results_dict['prob'] = prob
-         results_dict['labels_pred'] = labels_pred
-         results_dict['confusion_matrix'] = confusion_matrix
-         results_dict['accuracy'] = acc
-         results_dict['precision'] = prec
-         results_dict['recall'] = rec
-         results_dict['roc_score'] = roc_auc1
-         results_dict['roc_fpr'] = fpr1
-         results_dict['roc_tpr'] = tpr1
-         results_dict['fscore'] = fscore
-         results_dict['mean_square_error'] = mean_s_error
-         results_dict['r_square'] = r_square
-         results_dict['model_params'] = save_model
-         #results_dict['accuracy_boot_perm'] = accuracy_boot_perm
-          
+         keys =['classes','features','prob','labels_pred','confusion_matrix','accuracy','precision','recall','fscore']
+         values = [classes_real, features, prob, labels_pred, confusion_matrix, acc, prec, rec, fscore] 
+         results_dict = dict(zip(keys, values))   
+         #get unique features
+         unique_features, frequency_list, dict_index_per_feature = treat_data.find_unique_features(results_dict['features'])
+         filtered_feature,filtered_frequencies, filtered_indices_dict= treat_data.filter_data(unique_features, frequency_list, dict_index_per_feature )
+         #get for each feature important values
 
-         return results_dict
+         new_dictionary = treat_data.get_dictionary_with_features(results_dict, filtered_feature,filtered_indices_dict,filtered_frequencies)
+         a=1
+         return new_dictionary
     
     
   

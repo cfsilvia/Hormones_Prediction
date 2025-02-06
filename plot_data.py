@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib
 import pandas as pd
 from matplotlib.lines import Line2D
+from collections import defaultdict
 #matplotlib.use('TkAgg') 
 #plt.ion() # Turn on the interactive mode
 
@@ -78,36 +79,40 @@ class plot_data:
     input:
     output: precision bar plot
     '''
-    def plot_precision(self, hormone_dict):
-       num_keys = len(hormone_dict)
-       num_items = [len(v) for v in hormone_dict.values()]
-       fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
-       fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
+    def plot_precision(self, hormones_list,models_list):
+        num_keys = len(hormones_list)
+        num_items = len(models_list)
+        
+        fig, axs = plt.subplots((num_keys+1) , (num_items +1),  figsize=((num_items+1)*6, (num_keys+1)*4)) #good 60
+        fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
         # turn off the axes
-       for i in range((num_keys+1)):
-           for j in range((max(num_items)+1)):
+        for i in range((num_keys+1)):
+           for j in range((num_items+1)):
                axs[i,j].set_axis_off()
        
-       for i, (h, list_models) in enumerate(hormone_dict.items()):
-              for j, m in enumerate(list_models):
-                axs[i,j].set_axis_on()
-                list_precision = self.data[h][m]['precision']   
-                array_mean =100*np.mean(list_precision, axis =0) 
-                array_se = 100*np.std(list_precision, axis=0, ddof=1)/np.sqrt(len(list_precision))
-                array_mean_list = array_mean.tolist()
-                array_se_list = array_se.tolist()
-                #get classes
-                class_names = self.data[h][m]['classes']
-                #bar plot
-                axs[i,j].bar(class_names, array_mean.tolist(), yerr = array_se_list, capsize = 5, color=['skyblue', 'salmon'], edgecolor = 'black', alpha = 0.7)
-                axs[i,j].set_title(h + '\n' + m, fontsize = 7, color='red')
-                axs[i, j].set_ylabel("Precision % ", fontsize = 8) 
-                axs[i,j].set_ylim(0, 120)
+        for i, h in enumerate(hormones_list):
+              for j, m in enumerate(models_list):
+                try:
+                  list_precision = self.data[m][h]['precision']   
+                  array_mean =100*np.mean(list_precision, axis =0) 
+                  array_se = 100*np.std(list_precision, axis=0, ddof=1)/np.sqrt(len(list_precision))
+                  array_mean_list = array_mean.tolist()
+                  array_se_list = array_se.tolist()
+                  #get classes
+                  class_names = self.data[m][h]['classes']
+                  axs[i,j].set_axis_on()
+                  #bar plot
+                  axs[i,j].bar(class_names, array_mean.tolist(), yerr = array_se_list, capsize = 5, color=['skyblue', 'salmon'], edgecolor = 'black', alpha = 0.7)
+                  axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
+                  axs[i, j].set_ylabel("Precision % ", fontsize = 8) 
+                  axs[i,j].set_ylim(0, 120)
+                except Exception as e:
+                  print("continue")
         
-       fig.tight_layout(pad=5)
-       fig.suptitle('Precision: TP/(TP+FN)'+ '  ' + self.title, x=0.5, y=0.99) 
-       plt.savefig(self.output_directory + self.title + '_precision' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
+              fig.tight_layout(pad=5)
+              fig.suptitle('Precision: TP/(TP+FN)'+ '  ' + self.title, x=0.5, y=0.99) 
+              plt.savefig(self.output_directory + self.title + '_precision' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
        #plt.show()
             
@@ -115,30 +120,32 @@ class plot_data:
     input:
     output: accuracy bar plot
     '''
-    def plot_accuracy(self, hormone_dict):
-       num_keys = len(hormone_dict)
-       num_items = [len(v) for v in hormone_dict.values()]
-       fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
+    def plot_accuracy(self, hormones_list,models_list):
+       num_keys = len(hormones_list)
+       num_items = len(models_list)
+       fig, axs = plt.subplots((num_keys+1) , (num_items +1),  figsize=((num_items+1)*6, (num_keys+1)*4)) #good 60
        fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
-       # turn off the axes
+        # turn off the axes
        for i in range((num_keys+1)):
-           for j in range((max(num_items)+1)):
+           for j in range((num_items+1)):
                axs[i,j].set_axis_off()
                
-       for i, (h, list_models) in enumerate(hormone_dict.items()):
-              for j, m in enumerate(list_models):
-                axs[i,j].set_axis_on()
-                list_precision = self.data[h][m]['accuracy']   
-                array_mean =100*np.mean(list_precision) 
-                array_mean_list = array_mean.tolist()
+       for i, h in enumerate(hormones_list):
+            for j, m in enumerate(models_list):
+              try:
+                list = self.data[m][h]['accuracy']   
+                array_mean =100*np.mean(list) 
                 #get classes
-                class_names = self.data[h][m]['classes']
+                class_names = self.data[m][h]['classes']
+                axs[i,j].set_axis_on()
                 #bar plot
                 axs[i,j].bar("two_classes", array_mean.tolist(), color=['skyblue'], edgecolor = 'black',width = 0.01)
-                axs[i,j].set_title(h + '\n' + m, fontsize = 7, color='red')
+                axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
                 axs[i, j].set_ylabel("Accuracy % ", fontsize = 8) 
                 axs[i,j].set_ylim(0, 120)
+              except Exception as e:
+                  print("continue")
           
        fig.tight_layout(pad=5)
        fig.suptitle('Accuracy: '+ '  ' + self.title, x=0.5, y=0.99) 
@@ -150,33 +157,35 @@ class plot_data:
     input:
     output: recagg bar plot
     '''
-    def plot_recall(self, hormone_dict):
-      num_keys = len(hormone_dict)
-      num_items = [len(v) for v in hormone_dict.values()]
-      fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
-      fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
-
+    def plot_recall(self, hormones_list,models_list):
+      num_keys = len(hormones_list)
+      num_items = len(models_list)
+      fig, axs = plt.subplots((num_keys+1) , (num_items +1),  figsize=((num_items+1)*6, (num_keys+1)*4)) #good 60
+      fig.subplots_adjust(hspace=0.5, wspace=0.3)  #
         # turn off the axes
       for i in range((num_keys+1)):
-           for j in range((max(num_items)+1)):
+           for j in range((num_items+1)):
                axs[i,j].set_axis_off()
        
-      for i, (h, list_models) in enumerate(hormone_dict.items()):
-              for j, m in enumerate(list_models):
-                axs[i,j].set_axis_on()
-                list_recall = self.data[h][m]['recall']   
+      for i, h in enumerate(hormones_list):
+            for j, m in enumerate(models_list):
+              try:
+                list_recall = self.data[m][h]['recall']   
                 array_mean =100*np.mean(list_recall, axis =0) 
                 array_se = 100*np.std(list_recall , axis=0, ddof=1)/np.sqrt(len(list_recall ))
                 array_mean_list = array_mean.tolist()
                 array_se_list = array_se.tolist()
                 
                 #get classes
-                class_names = self.data[h][m]['classes']
+                class_names = self.data[m][h]['classes']
+                axs[i,j].set_axis_on()
                 #bar plot
                 axs[i,j].bar(class_names, array_mean.tolist(), yerr = array_se_list, capsize = 5, color=['skyblue', 'salmon'], edgecolor = 'black', alpha = 0.7)
-                axs[i,j].set_title(h + '\n' + m, fontsize = 7, color='red')
+                axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
                 axs[i, j].set_ylabel("Recall % ", fontsize = 8) 
                 axs[i,j].set_ylim(0, 120)
+              except Exception as e:
+                  print("continue")
        
       fig.tight_layout(pad=5)
       fig.suptitle('Recall: TP/(TP+FP)'+ '  ' + self.title, x=0.5, y=0.99) 
@@ -187,36 +196,39 @@ class plot_data:
     input:
     output: plot confusion matrix
     '''
-    def plot_confusion_matrix(self, hormone_dict):
-        num_keys = len(hormone_dict)
-        num_items = [len(v) for v in hormone_dict.values()]
+    def plot_confusion_matrix(self, hormones_list,models_list):
+        num_keys = len(hormones_list)
+        num_items = len(models_list)
         
-        fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
+        fig, axs = plt.subplots((num_keys+1) , (num_items +1),  figsize=((num_items+1)*6, (num_keys+1)*4)) #good 60
         fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
         # turn off the axes
         for i in range((num_keys+1)):
-           for j in range((max(num_items)+1)):
+           for j in range((num_items+1)):
                axs[i,j].set_axis_off()
         
         #fig, axs = plt.subplots(len(hormones), len(models), figsize=(20, 15))
         
         
-        for i, (h, list_models) in enumerate(hormone_dict.items()):
-              for j, m in enumerate(list_models):
-                axs[i,j].set_axis_on()
-                list_confusion_matrix = self.data[h][m]['confusion_matrix']
-                #get classes
-                class_names = self.data[h][m]['classes']
-                # Calculate the sum of all the confusion matrix
-                sum_cm = np.sum(list_confusion_matrix, axis=0)
-                #calculate the sum of the rows
-                sum_rows = sum_cm.sum(axis=1, keepdims=True) 
-                #Normalize by the total number of instances per class
-                sns.heatmap(sum_cm/sum_rows, annot=True, fmt='.2%', cmap='Blues', cbar=False,xticklabels=class_names, yticklabels=class_names,annot_kws={"size": 8},ax =axs[i,j])
-                axs[i,j].set_title(h + '\n' + m, fontsize = 7, color='red')
-                axs[i,j].set_xlabel('Predicted Labels')
-                axs[i,j].set_ylabel('True Labels')
+        for i, h in enumerate(hormones_list):
+              for j, m in enumerate(models_list):
+                try:
+                  list_confusion_matrix = self.data[m][h]['confusion_matrix']
+                  #get classes
+                  class_names = self.data[m][h]['classes']
+                  # Calculate the sum of all the confusion matrix
+                  sum_cm = np.sum(list_confusion_matrix, axis=0)
+                  #calculate the sum of the rows
+                  sum_rows = sum_cm.sum(axis=1, keepdims=True) 
+                  axs[i,j].set_axis_on()
+                  #Normalize by the total number of instances per class
+                  sns.heatmap(sum_cm/sum_rows, annot=True, fmt='.2%', cmap='Blues', cbar=False,xticklabels=class_names, yticklabels=class_names,annot_kws={"size": 8},ax =axs[i,j])
+                  axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
+                  axs[i,j].set_xlabel('Predicted Labels')
+                  axs[i,j].set_ylabel('True Labels')
+                except Exception as e:
+                  print("continue")
             
            
         
@@ -231,36 +243,40 @@ class plot_data:
      input:
     output: fscore bar plot
     '''
-    def plot_f1score(self, hormone_dict):
-      num_keys = len(hormone_dict)
-      num_items = [len(v) for v in hormone_dict.values()]
-      fig, axs = plt.subplots((num_keys+1) , (max(num_items)+1),  figsize=((max(num_items)+1)*6, (num_keys+1)*4)) #good 60
-      fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
+    def plot_f1score(self, hormones_list,models_list):
+        num_keys = len(hormones_list)
+        num_items = len(models_list)
+        
+        fig, axs = plt.subplots((num_keys+1) , (num_items +1),  figsize=((num_items+1)*6, (num_keys+1)*4)) #good 60
+        fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
         # turn off the axes
-      for i in range((num_keys+1)):
-           for j in range((max(num_items)+1)):
+        for i in range((num_keys+1)):
+           for j in range((num_items+1)):
                axs[i,j].set_axis_off()
        
-      for i, (h, list_models) in enumerate(hormone_dict.items()):
-              for j, m in enumerate(list_models):
-                axs[i,j].set_axis_on()
-                list_fscore = self.data[h][m]['fscore']   
+        for i, h in enumerate(hormones_list):
+            for j, m in enumerate(models_list):
+              try:
+                list_fscore = self.data[m][h]['fscore']   
                 array_mean =100*np.mean(list_fscore, axis =0) 
                 array_se = 100*np.std(list_fscore, axis=0, ddof=1)/np.sqrt(len(list_fscore))
                 array_mean_list = array_mean.tolist()
                 array_se_list = array_se.tolist()
                 #get classes
-                class_names = self.data[h][m]['classes']
+                class_names = self.data[m][h]['classes']
+                axs[i,j].set_axis_on()
                 #bar plot
                 axs[i,j].bar(class_names, array_mean.tolist(), yerr = array_se_list, capsize = 5, color=['skyblue', 'salmon'], edgecolor = 'black', alpha = 0.7)
-                axs[i,j].set_title(h + '\n' + m, fontsize = 7, color='red')
+                axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
                 axs[i, j].set_ylabel("f-score % ", fontsize = 8) 
                 axs[i,j].set_ylim(0, 120)
+              except Exception as e:
+                  print("continue")
               
-      fig.tight_layout(pad=5)
-      fig.suptitle('f-score: 2X(precxrecall)/(prec+recall)'+ '  ' + self.title, x=0.5, y=0.99) 
-      plt.savefig(self.output_directory + self.title + '_fscore' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
+        fig.tight_layout(pad=5)
+        fig.suptitle('f-score: 2X(precxrecall)/(prec+recall)'+ '  ' + self.title, x=0.5, y=0.99) 
+        plt.savefig(self.output_directory + self.title + '_fscore' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
       # Show the plot
       #plt.show()
                 
@@ -316,74 +332,54 @@ class plot_data:
        input: dictionary
        output: dataframe
       ''' 
-    def create_table(self,hormones,models,class_to_use):
-       class1 = str(self.data[hormones[0]][models[0]]['classes'][0])
-       class2 = str(self.data[hormones[0]][models[0]]['classes'][1])
+    def create_table(self):
+       # Create a dictionary where values are empty lists by default
+       data_dict = defaultdict(list)
        
-       data_dict ={'hormones':[],'models' : [], 'accuracy' :[], 'se_accuracy' : [],
-                  'precision_' + class1:[], 'se_precision_'+ class1 : [], 'precision_' + class2:[], 'se_precision_' + class2 : [],
-                   'recall_' + class1:[], 'se_recall_' + class1:[],'recall_' + class2:[], 'se_recall_' + class2:[],
-                   'f_score_' + class1 : [], 'se_f_score_' + class1 :[], 'f_score_' + class2 : [], 'se_f_score_' + class2 :[],
-                   '% true values' +  class1 : [], 
-                   '% true values' +  class2 : [],
-                   'mse' : [], 'r_square' : []}
        
-       for  j,h in enumerate(hormones ):
-           
-            for i,m in enumerate(models):
-                data_dict['hormones'].append(h)
-                data_dict['models'].append(m)
-                list_precision = self.data[h][m]['accuracy']   
-                array_mean =100*np.mean(list_precision) 
-                array_se = 100*np.std(list_precision, axis=0, ddof=1)/np.sqrt(len(list_precision))
-                data_dict['accuracy'].append(array_mean)
-                data_dict['se_accuracy'].append(array_se)
-                
-                #
-                list_precision = self.data[h][m]['precision']   
-                array_mean =100*np.mean(list_precision, axis =0) 
-                array_se = 100*np.std(list_precision, axis=0, ddof=1)/np.sqrt(len(list_precision))
-                data_dict['precision_' + class1].append(array_mean[0])
-                data_dict['se_precision_'+ class1].append(array_se[0])
-                data_dict['precision_'+ class2].append(array_mean[1])
-                data_dict['se_precision_'+ class2].append(array_se[1])
-                #
-                list_precision = self.data[h][m]['recall']   
-                array_mean =100*np.mean(list_precision, axis =0) 
-                array_se = 100*np.std(list_precision, axis=0, ddof=1)/np.sqrt(len(list_precision))
-                data_dict['recall_' + class1].append(array_mean[0])
-                data_dict['se_recall_' + class1].append(array_se[0])
-                data_dict['recall_' + class2].append(array_mean[1])
-                data_dict['se_recall_' + class2].append(array_se[1])
-                #
-                list_precision = self.data[h][m]['fscore']   
-                array_mean =100*np.mean(list_precision, axis =0) 
-                array_se = 100*np.std(list_precision, axis=0, ddof=1)/np.sqrt(len(list_precision))
-                data_dict['f_score_' + class1].append(array_mean[0])
-                data_dict['se_f_score_' + class1].append(array_se[0])
-                data_dict['f_score_' + class2].append(array_mean[1])
-                data_dict['se_f_score_' + class2].append(array_se[1])
-                #
-                #
-                list_confusion_matrix = self.data[h][m]['confusion_matrix']
-                sum_cm = np.sum(list_confusion_matrix, axis=0)
-                sum_rows = sum_cm.sum(axis=1, keepdims=True) 
-                fraction = (sum_cm/sum_rows)*100
-                data_dict['% true values' +  class2].append(fraction[1,1])
-                data_dict['% true values' + class1].append(fraction[0,0])
-                #
-                list_precision = self.data[h][m]['mean_square_error']   
-                array_mean =100*np.mean(list_precision) 
-                data_dict['mse'].append(array_mean)
-                 #
-                list_precision = self.data[h][m]['r_square']   
-                array_mean =100*np.mean(list_precision) 
-                data_dict['r_square'].append(array_mean)
-                
-        #  Convert into dictionary
+       for m, inner_dict in self.data.items():
+           print(f"key: {m}")
+           for h, value in inner_dict.items():
+                 print(f"  {h}")  
+                 class1 = str(value['classes'][0])
+                 class2 = str(value['classes'][1])
+                 data_dict['hormones'].append(h)
+                 data_dict['models'].append(m)                  
+                 data_dict['repetition_feature'].append(value['repetition_feature'])
+               
+                 data_dict['accuracy'].append(100*np.mean(value['accuracy'],axis=0 ))
+                 data_dict['se_accuracy'].append(100*np.std(value['accuracy'], axis=0, ddof=1)/np.sqrt(len(value['accuracy'])))
+                 
+                 data_dict['precision_' + class1].append((100*np.mean(value['precision'],axis=0 ))[0])
+                 data_dict['se_precision_' + class1].append((100*np.std(value['precision'], axis=0, ddof=1)/np.sqrt(len(value['precision'])))[0])
+                 
+                 data_dict['precision_' + class2].append((100*np.mean(value['precision'],axis=0 ))[1])
+                 data_dict['se_precision_' + class2].append((100*np.std(value['precision'], axis=0, ddof=1)/np.sqrt(len(value['precision'])))[1])
+                 
+                 data_dict['recall_' + class1].append((100*np.mean(value['recall'],axis=0 ))[0])
+                 data_dict['se_recall_' + class1].append((100*np.std(value['recall'], axis=0, ddof=1)/np.sqrt(len(value['recall'])))[0])
+                 
+                 data_dict['recall_' + class2].append((100*np.mean(value['recall'],axis=0 ))[1])
+                 data_dict['se_recall_' + class2].append((100*np.std(value['recall'], axis=0, ddof=1)/np.sqrt(len(value['recall'])))[1])
+                 
+                 data_dict['fscore_' + class1].append((100*np.mean(value['fscore'],axis=0 ))[0])
+                 data_dict['se_fscore_' + class1].append((100*np.std(value['fscore'], axis=0, ddof=1)/np.sqrt(len(value['fscore'])))[0])
+                 
+                 data_dict['fscore_' + class2].append((100*np.mean(value['fscore'],axis=0 ))[1])
+                 data_dict['se_fscore_' + class2].append((100*np.std(value['fscore'], axis=0, ddof=1)/np.sqrt(len(value['fscore'])))[1])
+                 
+                 #confusion matrix
+                 sum_cm = np.sum(value['confusion_matrix'], axis=0)
+                 sum_rows = sum_cm.sum(axis=1, keepdims=True) 
+                 fraction = (sum_cm/sum_rows)*100
+                 data_dict['% true values' +  class2].append(fraction[1,1])
+                 data_dict['% true values' + class1].append(fraction[0,0])
+                 
+                         
+        #  Convert into dataframe
         
        total_data = pd.DataFrame(data_dict)
-       return   total_data,class1, class2
+       return   total_data,data_dict
     
     '''
     input: total filter
@@ -436,27 +432,27 @@ class plot_data:
         
         
     def __call__(self,select_column_prob):
-        keys = plot_data.separate_keys(self.data)
-        hormones = list(set(keys[0]))
-        models = list(set(keys[1]))
-        parameters = list(set(keys[2])) #use set to get unique values
-        total_data, class1, class2 = self.create_table(hormones,models,select_column_prob)
+      
+        total_data, data_dict = self.create_table()
         #filter data according to confusion matrix
-        total_data_filter_confusion = self.filter_confusion(total_data, class1,class2)
-        total_data_filter_all = self.filter_precision(total_data_filter_confusion, class1,class2)
-        #create dictionary for each hormone with the correspond model data
-        dict_hormones_models = self.create_dict(total_data_filter_all)
-        #plot relevant data
-       
-        if not total_data_filter_all.empty:
-          self.plot_confusion_matrix(dict_hormones_models)
-          self.plot_precision(dict_hormones_models)
-          self.plot_recall(dict_hormones_models)
-          self.plot_f1score(dict_hormones_models)
-          self.plot_accuracy(dict_hormones_models)
-          self.plot_prob(dict_hormones_models,select_column_prob)
+        # total_data_filter_confusion = self.filter_confusion(total_data, class1,class2)
+        # total_data_filter_all = self.filter_precision(total_data_filter_confusion, class1,class2)
+        # #create dictionary for each hormone with the correspond model data
+        # dict_hormones_models = self.create_dict(total_data_filter_all)
+        # #plot relevant data
+        #list hormones
+        hormones_list = list(set(data_dict['hormones']))
+        models_list = list(set(data_dict['models']))
+        
+        if not total_data.empty:
+          self.plot_confusion_matrix(hormones_list,models_list)
+          self.plot_precision(hormones_list,models_list)
+          self.plot_recall(hormones_list,models_list)
+          self.plot_f1score(hormones_list,models_list)
+          self.plot_accuracy(hormones_list,models_list)
+       #   self.plot_prob(hormones_list,models_list)
       #  self.plot_boot_histograms(hormones,models)
 
 
-        return total_data, total_data_filter_confusion,total_data_filter_all
+        return total_data
      

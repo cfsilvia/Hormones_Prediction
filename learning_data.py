@@ -37,7 +37,7 @@ class learning_data:
           model = RandomForestClassifier(n_estimators = 200, random_state=42) 
           #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
       elif self.model_name == "logistic":
-          model = LogisticRegression(max_iter=1000, random_state=42)
+          model = LogisticRegression(max_iter=1000, random_state=42,penalty ='l2',C=0.1)
       elif self.model_name == 'decision_tree':
           model = DecisionTreeClassifier(random_state=42)
       elif self.model_name == "k_neighbors":
@@ -81,47 +81,16 @@ class learning_data:
     output: probabilities and metrics
     '''
     def test_model(self,model):
-        y_pred = model.predict(self.X_test)
-        probabilities = model.predict_proba(self.X_test)
-        # Compute confusion matrix
-        cm = confusion_matrix(self.y_test, y_pred)
-        print("Confusion Matrix:\n", cm)
-        # Calculate precision, recall, and F1-score-for each class
-        precision, recall, f1, _ = precision_recall_fscore_support(self.y_test, y_pred, average=None)
-        print("\nClassification Report:\n", classification_report(self.y_test, y_pred))
         
-        # Extract TP, TN, FP, FN
-        TP = cm[1, 1]
-        TN = cm[0, 0]
-        FP = cm[0, 1]
-        FN = cm[1, 0]
-
-        # Calculate accuracy
-        accuracy = (TP + TN) / np.sum(cm)
-        classes = model.classes_
-         # Calculate the AUC - ROC score
-         #Compute Area Under the Receiver Operating Characteristic Curve (ROC AUC) \
-         #from prediction scores. the classifier should be binary
+      probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = learning_data.calculate_metrics(self.X_test,self.y_test,model)
+      #probabilities_train, accuracy_train,y_pred_train, classes,cm_train,precision_train,recall_train,f1_train = learning_data.calculate_metrics(self.X_train,self.y_train,model)
         
-        Aux = pd.DataFrame(self.y_test)
-        Aux['binary'] = 0
-        Aux.loc[Aux.iloc[:,0] == classes[0],'binary'] = 1
-        labels_true = Aux['binary']
-        roc_auc = roc_auc_score(labels_true, probabilities[:,0])
-        # Compute ROC curve
-        fpr, tpr, _ = roc_curve(labels_true, probabilities[:,0])
-        #
-        # Evaluate the model
-        mse = mean_squared_error(self.y_test, y_pred) #mean squared error
-        r2 = r2_score(self.y_test, y_pred) #rsquared score
-
-        
-        return probabilities, accuracy,y_pred, classes,cm,precision,recall, roc_auc,fpr,tpr,f1,mse,r2
+      return  probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test
     
     '''
     input: train data
     output : train data bootstrapped and the labels are permutated to break the relation between features and labels
-     '''
+    '''
     def randomize_train_data(self):
         # Bootstrap sample
         indices = np.random.choice(range(len(self.X_train)), size=len(self.X_train), replace=True)
@@ -147,7 +116,7 @@ class learning_data:
           model = RandomForestClassifier(n_estimators = 200, random_state=42) 
           #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
         elif model_name == "logistic":
-          model = LogisticRegression(max_iter=1000, random_state=42)
+          model = LogisticRegression(max_iter=1000, random_state=42,penalty ='l2',C=0.1)
         elif model_name == 'decision_tree':
           model = DecisionTreeClassifier(random_state=42)
         elif model_name == "k_neighbors":
@@ -160,13 +129,58 @@ class learning_data:
            model = GaussianNB()
         
         return model
-           
+     
     
+    '''
+     input: features and classification
+     output metrics
+     '''
+    @staticmethod      
+    def calculate_metrics(X,y,model):
+      
+      y_pred = model.predict(X)
+      probabilities = model.predict_proba(X)
+      # Compute confusion matrix
+      cm = confusion_matrix(y, y_pred)
+      print("Confusion Matrix:\n", cm)
+        # Calculate precision, recall, and F1-score-for each class
+      precision, recall, f1, _ = precision_recall_fscore_support(y, y_pred, average=None)
+      print("\nClassification Report:\n", classification_report(y, y_pred))
+        
+      # Extract TP, TN, FP, FN
+      TP = cm[1, 1]
+      TN = cm[0, 0]
+      FP = cm[0, 1]
+      FN = cm[1, 0]
+
+      # Calculate accuracy
+      accuracy = (TP + TN) / np.sum(cm)
+      classes = model.classes_
+        
+         # Calculate the AUC - ROC score
+         #Compute Area Under the Receiver Operating Characteristic Curve (ROC AUC) \
+         #from prediction scores. the classifier should be binary
+        
+        # Aux = pd.DataFrame(self.y_test)
+        # Aux['binary'] = 0
+        # Aux.loc[Aux.iloc[:,0] == classes[0],'binary'] = 1
+        # labels_true = Aux['binary']
+        # roc_auc = roc_auc_score(labels_true, probabilities[:,0])
+        # # Compute ROC curve
+        # fpr, tpr, _ = roc_curve(labels_true, probabilities[:,0])
+        # #
+        # # Evaluate the model
+        # mse = mean_squared_error(self.y_test, y_pred) #mean squared error
+        # r2 = r2_score(self.y_test, y_pred) #rsquared score
+
+        
+      return probabilities, accuracy,y_pred, classes,cm,precision,recall,f1
+        
 
     def __call__(self):
         #original data
         model = self.train_model()
-        probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr, f1,mse, r2 = self.test_model(model)
+        probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test= self.test_model(model)
         
         #for bootstrapping
         # n_bootstraps = 100
@@ -178,4 +192,4 @@ class learning_data:
         #     permuted_accuracies.append(accuracy_b)
         # accuracies_bootstraps = np.mean(permuted_accuracies)
             
-        return probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1,mse,r2,model #,accuracies_bootstraps
+        return probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test #,accuracies_bootstraps
