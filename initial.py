@@ -105,7 +105,7 @@ def main_menu(choice,data):
                 data = pickle.load(f)
                 
             new_obj = plot_data(data, title_file, ouput_directory)
-            total_data, total_data_filter_confusion,total_data_filter_all = new_obj(select_column_prob)
+            total_data = new_obj(select_column_prob)
            
             
             with pd.ExcelWriter(ouput_directory + title_file  + '.xlsx') as writer:
