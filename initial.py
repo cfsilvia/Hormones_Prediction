@@ -40,8 +40,8 @@ def main_menu(choice,data):
            #for randomization
             #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
             #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
-            list_models = ["logistic","random_forest", "decision_tree","SVC_linear"]
-            #list_models = ["logistic","SVC_linear",]
+            #list_models = ["logistic","random_forest", "decision_tree","SVC_linear"]
+            list_models = ["random_forest", "decision_tree"]
            
 
             model_dict ={}
@@ -180,7 +180,7 @@ def main_menu(choice,data):
 
 
 if __name__ == "__main__":
-    with open("Z:/cfsilvia/Data/settings_windows.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
+    with open("/home/labs/kimchi/cfsilvia/Data/settings_linux.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    
     main_menu(choice,data)

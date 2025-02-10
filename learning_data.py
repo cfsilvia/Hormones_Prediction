@@ -144,8 +144,8 @@ class learning_data:
       cm = confusion_matrix(y, y_pred)
       print("Confusion Matrix:\n", cm)
         # Calculate precision, recall, and F1-score-for each class
-      precision, recall, f1, _ = precision_recall_fscore_support(y, y_pred, average=None)
-      print("\nClassification Report:\n", classification_report(y, y_pred))
+      precision, recall, f1, _ = precision_recall_fscore_support(y, y_pred,zero_division=0, average=None,)
+      print("\nClassification Report:\n", classification_report(y, y_pred,zero_division=0))
         
       # Extract TP, TN, FP, FN
       TP = cm[1, 1]

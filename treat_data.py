@@ -30,6 +30,7 @@ class treat_data:
         #select hormones and status
         if choice == "2":
             #add a columns to distinguish each arena experiment with numbers, beggining from 1
+            selected_data = selected_data.copy()
             selected_data['groups'] = pd.factorize(selected_data['Experiment'])[0] + 1
             selection = hormones[:] #creates a shallow copy
             selection.append('status')
@@ -159,14 +160,14 @@ class treat_data:
      output: filter features with corresponding index in the original list, filter according to a frequency larger than 3 
      '''
     @staticmethod
-    def filter_data(unique_lists, frequencies, indices_dict):
+    def filter_data(unique_lists, frequencies, indices_dict,n_repeats):
         filtered_lists = []
         filtered_frequencies = []
         filtered_indices_dict = {}
         
         for lst, freq  in zip(unique_lists, frequencies):
             t= tuple(lst)
-            if freq > 100: #keep only  features which appear more than 3 times or 2%
+            if freq > (n_repeats*2)/100: #keep only  features which appear more than 3 times or 2% larger
               filtered_lists.append(lst)
               filtered_frequencies.append(freq)
               filtered_indices_dict[t] = indices_dict[t]
@@ -247,7 +248,7 @@ class treat_data:
          results_dict = dict(zip(keys, values))   
          #get unique features
          unique_features, frequency_list, dict_index_per_feature = treat_data.find_unique_features(results_dict['features'])
-         filtered_feature,filtered_frequencies, filtered_indices_dict= treat_data.filter_data(unique_features, frequency_list, dict_index_per_feature )
+         filtered_feature,filtered_frequencies, filtered_indices_dict= treat_data.filter_data(unique_features, frequency_list, dict_index_per_feature,n_repeats )
          #get for each feature important values
 
          new_dictionary = treat_data.get_dictionary_with_features(results_dict, filtered_feature,filtered_indices_dict,filtered_frequencies)

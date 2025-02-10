@@ -57,7 +57,11 @@ class Find_better_features:
                seen.add(inner_tuple1)
                
         return list_features
-            
+    
+    '''
+    input: train data
+    output: features which were obtained from statistics
+    '''         
         
        
          
