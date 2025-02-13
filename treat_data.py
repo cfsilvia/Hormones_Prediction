@@ -57,14 +57,14 @@ class treat_data:
             y = data.iloc[:,(data.shape[1]-1)]
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3,
                                                               stratify=y, shuffle=True, 
-                                                              random_state=np.random.randint(1000))
+                                                              random_state=np.random.randint(4000))
         elif choice == "2":
           X = data.iloc[:,0:(data.shape[1]-2)]
           y = data.iloc[:,(data.shape[1]-2)]
           
           X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3,
                                                                 stratify=y, shuffle=True, 
-                                                                random_state=np.random.randint(1000))
+                                                                random_state=np.random.randint(4000))
           
           # # Define the splitter according groups
           # gss = GroupShuffleSplit(n_splits=1, test_size=0.3,random_state=np.random.randint(1000)) 
@@ -80,6 +80,7 @@ class treat_data:
           a=1
           
         return X_train, X_test, y_train, y_test
+      
     '''
     input = train and test features data
     output = normalized train data , and test data normalize as train data
@@ -199,25 +200,49 @@ class treat_data:
       return results
     
     '''
+    input: selected data, choice and selected index
+    output: split data and selected data- script assure that the splitting are uniques
+    '''
+    def split_and_check(self,selected_data,choice,previous_splits):
+        while True:
+             X_train, X_test, y_train, y_test = self.split_data(selected_data,choice)
+             train_indices = y_train.index.tolist()
+             test_indices = y_test.index.tolist()
+             
+             # Convert to frozenset to allow set comparison
+             split_pair = (tuple(train_indices), tuple(test_indices))
+             # Check if the split already exists
+             if split_pair not in previous_splits:
+               previous_splits.append(split_pair) #store split pair
+               break #get out from the while loop
+             else:
+               print("duplicate split")
+               
+        return X_train, X_test, y_train, y_test, previous_splits
+    
+    '''
     auxiliary method
     '''  
     @staticmethod
     def get_selected_data(parameter,indices):
        selected_data = [parameter[i] for i in indices]
        return selected_data
+     
+     
       
     '''
     input: selected data
     output : after splitting and learning get dictionary 
     '''
-    def train_learning(self,selected_data, model_name=None,n_repeats = None,choice = None):
+    def train_learning(self,selected_data, model_name=None,n_repeats = None,choice = None,findFeatureMethod = None):
+         previous_indices = []
          #create dictionary of the results
          results_dict = {}
          prob , labels_pred , confusion_matrix , acc , prec ,rec , fscore, features = [], [], [], [], [], [], [],[]
 
          for count in range(n_repeats):
-            #get train  and test data
-            X_train, X_test, y_train, y_test =self.split_data(selected_data,choice)
+            #get train  and test data and check that each split is unique
+            X_train, X_test, y_train, y_test, previous_indices =self.split_and_check(selected_data,choice,previous_indices)
             #normalize the train data-use normalization for test data
             X_train_scaled, X_test_scaled = self.normalization(X_train,X_test)
             #balance the train data by using smote
@@ -230,18 +255,24 @@ class treat_data:
             
              #select features for Xtrain
             features_obj = Find_better_features(X_train_resampled,y_train_resampled,X_train)
-            selected_features, index_features = features_obj(model_name)
-            
-            #learn the system take relevant features
-            new_obj = learning_data(X_train_resampled[:,index_features],X_test_scaled[:,index_features],y_train_resampled, y_test,model_name)
+            try:
+                if findFeatureMethod == 'RFCEV':
+                  selected_features, index_features = features_obj(model_name)
+                elif findFeatureMethod == 'statistical':
+                    selected_features, index_features = features_obj.get_best_features_from_statiscal()
+                
+                #learn the system take relevant features
+                new_obj = learning_data(X_train_resampled[:,index_features],X_test_scaled[:,index_features],y_train_resampled, y_test,model_name)
 
-            
-            #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
-            probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = new_obj()
-            a=1
-            prob.append(probabilities_test), labels_pred.append(y_pred_test), confusion_matrix.append(cm_test), acc.append(accuracy_test),prec.append(precision_test), rec.append(recall_test), 
-            fscore.append(f1_test), features.append(selected_features.tolist())
-            print("round:", count)
+                
+                #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
+                probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = new_obj()
+                a=1
+                prob.append(probabilities_test), labels_pred.append(y_pred_test), confusion_matrix.append(cm_test), acc.append(accuracy_test),prec.append(precision_test), rec.append(recall_test), 
+                fscore.append(f1_test), features.append(selected_features.tolist())
+                print("round:", count)
+            except Exception as e:
+                print("no combination")
             
          keys =['classes','features','prob','labels_pred','confusion_matrix','accuracy','precision','recall','fscore']
          values = [classes_real, features, prob, labels_pred, confusion_matrix, acc, prec, rec, fscore] 
@@ -257,7 +288,7 @@ class treat_data:
     
     
   
-    def __call__(self,model = None,n_repeats = None, sex = None, choice = None, hormones = None, architype = None): 
+    def __call__(self,model = None,n_repeats = None, sex = None, choice = None,findFeatureMethod = None, hormones = None, architype = None): 
         
          
          #select data to work with
@@ -266,7 +297,7 @@ class treat_data:
          elif choice == "3":
             selected_data = self.select_data(sex, choice, hormones,architype)
             
-         results_dict = self.train_learning(selected_data, model,n_repeats,choice)
+         results_dict = self.train_learning(selected_data, model,n_repeats,choice,findFeatureMethod)
          
          return results_dict   
          # if it is required randomize the data

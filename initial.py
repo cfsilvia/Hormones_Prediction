@@ -31,6 +31,8 @@ def main_menu(choice,data):
             n_repeats = data['2']['n_repeats']
             index_hormones = data['2']['index_hormones']
             output_directory = data['2']['output_directory']
+            findFeatureMethod = data['2']['method_find_features']
+            list_models = data['2']['models']
             #hormones to use
             table = pd.read_excel(output_file,sheet_name="All_data")
             aux = table.columns
@@ -41,7 +43,7 @@ def main_menu(choice,data):
             #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
             #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
             #list_models = ["logistic","random_forest", "decision_tree","SVC_linear"]
-            list_models = ["random_forest", "decision_tree"]
+            #list_models = ["random_forest"]
            
 
             model_dict ={}
@@ -49,7 +51,7 @@ def main_menu(choice,data):
                     
             for model in list_models:
                         new_obj = treat_data(output_file)
-                        results_dict = new_obj(model, n_repeats,sex,choice,hormones_combination)
+                        results_dict = new_obj(model, n_repeats,sex,choice,findFeatureMethod,hormones_combination)
                         print(model)
                         model_dict[model] = results_dict # for each model there is a dictionary
                         a=1
@@ -57,7 +59,7 @@ def main_menu(choice,data):
                     
             # # Save the dictionary
             with open(output_directory + title_file + '.pkl', 'wb') as f:
-                pickle.dump(model_dict, f)
+                pickle.dump(model_dict, f,protocol=pickle.HIGHEST_PROTOCOL)
                 
      
         

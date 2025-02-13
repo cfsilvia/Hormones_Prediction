@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 from learning_data import learning_data
 from sklearn.feature_selection import RFECV
 from sklearn.metrics import make_scorer, f1_score
@@ -7,6 +7,9 @@ from collections import Counter
 import pickle
 from sklearn.model_selection import StratifiedKFold
 import warnings
+from sklearn.model_selection import KFold
+from scipy.stats import mannwhitneyu
+
 # Example: Ignore DeprecationWarning
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -61,9 +64,26 @@ class Find_better_features:
     '''
     input: train data
     output: features which were obtained from statistics
-    '''         
-        
-       
+    '''          
+    def get_best_features_from_statiscal(self):
+        num_folds = 5
+        kf = KFold(n_splits=num_folds)  
+        p_val_features_fold = np.zeros(shape=(num_folds,self.X_train.shape[1]))
+        n_fold = 0
+        threshold_pval = 0.1 #or 0.1
+        # Iterating over the splits
+        for train_index, _ in kf.split(self.X_train):
+            X_train_fold = self.X_train[train_index,:]
+            y_train_fold = self.y_train[train_index]
+            x_0 = X_train_fold[y_train_fold == 0]
+            x_1 = X_train_fold[y_train_fold == 1]
+            p_val = mannwhitneyu(x_0, x_1)[1]
+            p_val_features_fold[n_fold,:] = p_val
+            n_fold +=1
+        feature_selected_k_fold = np.average(p_val_features_fold, axis=0) < threshold_pval
+        indexes_selected_features = np.where(feature_selected_k_fold)[0]
+        selected_features = self.X_train_with_columns.columns[indexes_selected_features]
+        return selected_features, indexes_selected_features
          
     def __call__(self,model_name = None):       
        
