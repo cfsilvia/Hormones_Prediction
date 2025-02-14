@@ -57,14 +57,14 @@ class treat_data:
             y = data.iloc[:,(data.shape[1]-1)]
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3,
                                                               stratify=y, shuffle=True, 
-                                                              random_state=np.random.randint(4000))
+                                                              random_state=np.random.randint(20000))
         elif choice == "2":
           X = data.iloc[:,0:(data.shape[1]-2)]
           y = data.iloc[:,(data.shape[1]-2)]
           
           X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3,
                                                                 stratify=y, shuffle=True, 
-                                                                random_state=np.random.randint(4000))
+                                                                random_state=np.random.randint(20000))
           
           # # Define the splitter according groups
           # gss = GroupShuffleSplit(n_splits=1, test_size=0.3,random_state=np.random.randint(1000)) 
@@ -268,8 +268,8 @@ class treat_data:
                 #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
                 probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = new_obj()
                 a=1
-                prob.append(probabilities_test), labels_pred.append(y_pred_test), confusion_matrix.append(cm_test), acc.append(accuracy_test),prec.append(precision_test), rec.append(recall_test), 
-                fscore.append(f1_test), features.append(selected_features.tolist())
+                prob.append(probabilities_test.astype(np.float32)), labels_pred.append(y_pred_test.astype(np.float32)), confusion_matrix.append(cm_test.astype(np.float32)), acc.append(accuracy_test.astype(np.float32)),prec.append(precision_test.astype(np.float32)), rec.append(recall_test.astype(np.float32)), 
+                fscore.append(f1_test.astype(np.float32)), features.append(selected_features.tolist())
                 print("round:", count)
             except Exception as e:
                 print("no combination")

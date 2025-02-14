@@ -8,8 +8,10 @@ from treat_validation_data import treat_validation_data
 from Find_better_features import Find_better_features
 from treat_random_data import treat_random_data
 import yaml
+from memory_profiler import profile
+import Auxiliary_functions
 #from sklearn.ensemble import AdaBoostClassifier
-
+@profile
 def main_menu(choice,data):
      
         if choice == "1":
@@ -46,20 +48,23 @@ def main_menu(choice,data):
             #list_models = ["random_forest"]
            
 
-            model_dict ={}
+            #model_dict ={}
             
                     
             for model in list_models:
+                        model_dict ={}
                         new_obj = treat_data(output_file)
                         results_dict = new_obj(model, n_repeats,sex,choice,findFeatureMethod,hormones_combination)
                         print(model)
                         model_dict[model] = results_dict # for each model there is a dictionary
+                        filename = output_directory + title_file + '.pkl'
+                        Auxiliary_functions.save_part_of_dict(filename, model, model_dict)
                         a=1
                        
                     
             # # Save the dictionary
-            with open(output_directory + title_file + '.pkl', 'wb') as f:
-                pickle.dump(model_dict, f,protocol=pickle.HIGHEST_PROTOCOL)
+            # with open(output_directory + title_file + '.pkl', 'wb') as f:
+            #     pickle.dump(model_dict, f,protocol=pickle.HIGHEST_PROTOCOL)
                 
      
         
@@ -182,7 +187,7 @@ def main_menu(choice,data):
 
 
 if __name__ == "__main__":
-    with open("/home/labs/kimchi/cfsilvia/Data/settings_linux.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
+    with open("Z:/cfsilvia/Data/settings_windows.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    
     main_menu(choice,data)
