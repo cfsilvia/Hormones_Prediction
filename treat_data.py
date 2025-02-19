@@ -234,7 +234,7 @@ class treat_data:
     input: selected data
     output : after splitting and learning get dictionary 
     '''
-    def train_learning(self,selected_data, model_name=None,n_repeats = None,choice = None,findFeatureMethod = None):
+    def train_learning(self,selected_data,normalization, model_name=None,n_repeats = None,choice = None,findFeatureMethod = None):
          previous_indices = []
          #create dictionary of the results
          results_dict = {}
@@ -244,7 +244,12 @@ class treat_data:
             #get train  and test data and check that each split is unique
             X_train, X_test, y_train, y_test, previous_indices =self.split_and_check(selected_data,choice,previous_indices)
             #normalize the train data-use normalization for test data
-            X_train_scaled, X_test_scaled = self.normalization(X_train,X_test)
+            if normalization:
+               X_train_scaled, X_test_scaled = self.normalization(X_train,X_test)
+            else:
+               X_train_scaled = X_train
+               X_test_scaled = X_test
+                
             #balance the train data by using smote
             X_train_resampled, y_train_resampled = self.balance_data(X_train_scaled,y_train)
             #Convert the categorical data into binary
@@ -260,9 +265,11 @@ class treat_data:
                   selected_features, index_features = features_obj(model_name)
                 elif findFeatureMethod == 'statistical':
                     selected_features, index_features = features_obj.get_best_features_from_statiscal()
+                elif findFeatureMethod == 'shap':
+                     selected_features, index_features = features_obj.get_best_features_from_shapley_values(model_name)
                 
                 #learn the system take relevant features
-                new_obj = learning_data(X_train_resampled[:,index_features],X_test_scaled[:,index_features],y_train_resampled, y_test,model_name)
+                new_obj = learning_data(X_train_resampled.iloc[:,index_features],X_test_scaled.iloc[:,index_features],y_train_resampled, y_test,model_name)
 
                 
                 #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
@@ -288,7 +295,7 @@ class treat_data:
     
     
   
-    def __call__(self,model = None,n_repeats = None, sex = None, choice = None,findFeatureMethod = None, hormones = None, architype = None): 
+    def __call__(self,model = None,normalization = None,n_repeats = None, sex = None, choice = None,findFeatureMethod = None, hormones = None, architype = None): 
         
          
          #select data to work with
@@ -297,7 +304,7 @@ class treat_data:
          elif choice == "3":
             selected_data = self.select_data(sex, choice, hormones,architype)
             
-         results_dict = self.train_learning(selected_data, model,n_repeats,choice,findFeatureMethod)
+         results_dict = self.train_learning(selected_data, normalization, model,n_repeats,choice,findFeatureMethod)
          
          return results_dict   
          # if it is required randomize the data

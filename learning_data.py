@@ -13,6 +13,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.metrics import mean_squared_error, r2_score
+import xgboost as xgb
 
 
 
@@ -34,7 +35,7 @@ class learning_data:
       elif self.model_name == "SVC_rbf":
          model = SVC(kernel='rbf',probability=True)
       elif self.model_name == "random_forest":
-          model = RandomForestClassifier(n_estimators = 200, random_state=42) 
+          model = RandomForestClassifier(n_estimators = 50, random_state=42, n_jobs = -1) 
           #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
       elif self.model_name == "logistic":
           model = LogisticRegression(max_iter=1000, random_state=42,penalty ='l2',C=0.1)
@@ -48,6 +49,8 @@ class learning_data:
           model = QuadraticDiscriminantAnalysis()
       elif self.model_name == "GaussianNB":
            model = GaussianNB()
+      elif self.model_name == "xgboost":
+           xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
             
       model.fit(self.X_train, self.y_train)
       return model
@@ -113,7 +116,7 @@ class learning_data:
         elif model_name == "SVC_rbf":
          model = SVC(kernel='rbf',probability=True)
         elif model_name == "random_forest":
-          model = RandomForestClassifier(n_estimators = 200, random_state=42) 
+          model = RandomForestClassifier(n_estimators = 20, random_state=42) 
           #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
         elif model_name == "logistic":
           model = LogisticRegression(max_iter=1000, random_state=42,penalty ='l2',C=0.1)

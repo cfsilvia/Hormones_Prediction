@@ -35,6 +35,7 @@ def main_menu(choice,data):
             output_directory = data['2']['output_directory']
             findFeatureMethod = data['2']['method_find_features']
             list_models = data['2']['models']
+            normalization = data['2']['normalization']
             #hormones to use
             table = pd.read_excel(output_file,sheet_name="All_data")
             aux = table.columns
@@ -54,7 +55,7 @@ def main_menu(choice,data):
             for model in list_models:
                         model_dict ={}
                         new_obj = treat_data(output_file)
-                        results_dict = new_obj(model, n_repeats,sex,choice,findFeatureMethod,hormones_combination)
+                        results_dict = new_obj(model, normalization, n_repeats,sex,choice,findFeatureMethod,hormones_combination)
                         print(model)
                         model_dict[model] = results_dict # for each model there is a dictionary
                         filename = output_directory + title_file + '.pkl'

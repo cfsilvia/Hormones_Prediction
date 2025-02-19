@@ -9,6 +9,7 @@ from sklearn.model_selection import StratifiedKFold
 import warnings
 from sklearn.model_selection import KFold
 from scipy.stats import mannwhitneyu
+import shap
 
 # Example: Ignore DeprecationWarning
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -61,6 +62,43 @@ class Find_better_features:
                
         return list_features
     
+    '''
+    input: train data
+    output: features and index according shapley values
+    '''
+    def get_best_features_from_shapley_values(self,model_name):
+        feature_importance = np.zeros(self.X_train.shape[1])
+        shap_values_all = []
+        #set up for cross validation
+        n_splits = 5
+        kf = StratifiedKFold(n_splits = n_splits, shuffle = True, random_state = 42)
+        for train_idx, val_idx in kf.split(self.X_train, self.y_train): 
+            X_train_fold, X_val_fold = self.X_train.iloc[train_idx], self.X_train.iloc[val_idx]
+            y_train_fold, y_val_fold = self.y_train.iloc[train_idx], self.y_train.iloc[val_idx]
+            #train model
+            new_obj = learning_data(X_train_fold,X_val_fold,y_train_fold, y_val_fold,model_name)
+            model = new_obj.train_model()
+            #compute Shap values
+            explainer = shap.TreeExplainer(model)
+            shap_values = explainer.shap_values(X_val_fold)[:,:,1] #SHAP values for class 1 calculation on the validation
+            #agregate shape values
+            mean_abs_shap = np.abs(shap_values).mean(axis=0)
+            feature_importance += mean_abs_shap
+            shap_values_all.append(mean_abs_shap)
+            
+        sorted_idx = np.argsort(feature_importance)[::-1]
+        cumulative_importance = np.cumsum(feature_importance[sorted_idx])/np.sum(feature_importance)
+        #choose features covering 90% of importance
+        num_features = np.argmax(cumulative_importance >= 0.90) + 1
+        selected_features_indexes = sorted_idx[:num_features]
+        selected_features = self.X_train_with_columns.columns[selected_features_indexes]
+        
+        return selected_features, selected_features_indexes
+     
+        
+        
+        
+        
     '''
     input: train data
     output: features which were obtained from statistics
