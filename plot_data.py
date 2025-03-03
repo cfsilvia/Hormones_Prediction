@@ -91,28 +91,28 @@ class plot_data:
            for j in range((num_items+1)):
                axs[i,j].set_axis_off()
        
-        for i, h in enumerate(hormones_list):
-              for j, m in enumerate(models_list):
+        i=0
+        for j, m in enumerate(models_list):
                 try:
-                  list_precision = self.data[m][h]['precision']   
+                  list_precision = self.data[m]['precision']   
                   array_mean =100*np.mean(list_precision, axis =0) 
                   array_se = 100*np.std(list_precision, axis=0, ddof=1)/np.sqrt(len(list_precision))
                   array_mean_list = array_mean.tolist()
                   array_se_list = array_se.tolist()
                   #get classes
-                  class_names = self.data[m][h]['classes']
+                  class_names = self.data[m]['classes']
                   axs[i,j].set_axis_on()
                   #bar plot
                   axs[i,j].bar(class_names, array_mean.tolist(), yerr = array_se_list, capsize = 5, color=['skyblue', 'salmon'], edgecolor = 'black', alpha = 0.7)
-                  axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
+                  axs[i,j].set_title(("+".join(self.data[m]['features'])) + '\n' + m, fontsize = 7, color='red')
                   axs[i, j].set_ylabel("Precision % ", fontsize = 8) 
                   axs[i,j].set_ylim(0, 120)
                 except Exception as e:
                   print("continue")
         
-              fig.tight_layout(pad=5)
-              fig.suptitle('Precision: TP/(TP+FN)'+ '  ' + self.title, x=0.5, y=0.99) 
-              plt.savefig(self.output_directory + self.title + '_precision' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
+                fig.tight_layout(pad=5)
+                fig.suptitle('Precision: TP/(TP+FN)'+ '  ' + self.title, x=0.5, y=0.99) 
+                plt.savefig(self.output_directory + self.title + '_precision' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
              # Show the plot
        #plt.show()
             
@@ -131,17 +131,17 @@ class plot_data:
            for j in range((num_items+1)):
                axs[i,j].set_axis_off()
                
-       for i, h in enumerate(hormones_list):
-            for j, m in enumerate(models_list):
+           i=0
+           for j, m in enumerate(models_list):
               try:
-                list = self.data[m][h]['accuracy']   
+                list = self.data[m]['accuracy']   
                 array_mean =100*np.mean(list) 
                 #get classes
-                class_names = self.data[m][h]['classes']
+                class_names = self.data[m]['classes']
                 axs[i,j].set_axis_on()
                 #bar plot
                 axs[i,j].bar("two_classes", array_mean.tolist(), color=['skyblue'], edgecolor = 'black',width = 0.01)
-                axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
+                axs[i,j].set_title(("+".join(self.data[m]['features'])) + '\n' + m, fontsize = 7, color='red')
                 axs[i, j].set_ylabel("Accuracy % ", fontsize = 8) 
                 axs[i,j].set_ylim(0, 120)
               except Exception as e:
@@ -167,21 +167,21 @@ class plot_data:
            for j in range((num_items+1)):
                axs[i,j].set_axis_off()
        
-      for i, h in enumerate(hormones_list):
-            for j, m in enumerate(models_list):
+           i=0
+           for j, m in enumerate(models_list):
               try:
-                list_recall = self.data[m][h]['recall']   
+                list_recall = self.data[m]['recall']   
                 array_mean =100*np.mean(list_recall, axis =0) 
                 array_se = 100*np.std(list_recall , axis=0, ddof=1)/np.sqrt(len(list_recall ))
                 array_mean_list = array_mean.tolist()
                 array_se_list = array_se.tolist()
                 
                 #get classes
-                class_names = self.data[m][h]['classes']
+                class_names = self.data[m]['classes']
                 axs[i,j].set_axis_on()
                 #bar plot
                 axs[i,j].bar(class_names, array_mean.tolist(), yerr = array_se_list, capsize = 5, color=['skyblue', 'salmon'], edgecolor = 'black', alpha = 0.7)
-                axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
+                axs[i,j].set_title(("+".join(self.data[m]['features'])) + '\n' + m, fontsize = 7, color='red')
                 axs[i, j].set_ylabel("Recall % ", fontsize = 8) 
                 axs[i,j].set_ylim(0, 120)
               except Exception as e:
@@ -211,12 +211,13 @@ class plot_data:
         #fig, axs = plt.subplots(len(hormones), len(models), figsize=(20, 15))
         
         
-        for i, h in enumerate(hormones_list):
-              for j, m in enumerate(models_list):
+        
+        for j, m in enumerate(models_list):
+                i=0
                 try:
-                  list_confusion_matrix = self.data[m][h]['confusion_matrix']
+                  list_confusion_matrix = self.data[m]['confusion_matrix']
                   #get classes
-                  class_names = self.data[m][h]['classes']
+                  class_names = self.data[m]['classes']
                   # Calculate the sum of all the confusion matrix
                   sum_cm = np.sum(list_confusion_matrix, axis=0)
                   #calculate the sum of the rows
@@ -224,7 +225,7 @@ class plot_data:
                   axs[i,j].set_axis_on()
                   #Normalize by the total number of instances per class
                   sns.heatmap(sum_cm/sum_rows, annot=True, fmt='.2%', cmap='Blues', cbar=False,xticklabels=class_names, yticklabels=class_names,annot_kws={"size": 8},ax =axs[i,j])
-                  axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
+                  axs[i,j].set_title('+'.join(self.data[m]['features']) + '\n' + m, fontsize = 7, color='red')
                   axs[i,j].set_xlabel('Predicted Labels')
                   axs[i,j].set_ylabel('True Labels')
                 except Exception as e:
@@ -255,20 +256,20 @@ class plot_data:
            for j in range((num_items+1)):
                axs[i,j].set_axis_off()
        
-        for i, h in enumerate(hormones_list):
-            for j, m in enumerate(models_list):
+        i=0
+        for j, m in enumerate(models_list):
               try:
-                list_fscore = self.data[m][h]['fscore']   
+                list_fscore = self.data[m]['fscore']   
                 array_mean =100*np.mean(list_fscore, axis =0) 
                 array_se = 100*np.std(list_fscore, axis=0, ddof=1)/np.sqrt(len(list_fscore))
                 array_mean_list = array_mean.tolist()
                 array_se_list = array_se.tolist()
                 #get classes
-                class_names = self.data[m][h]['classes']
+                class_names = self.data[m]['classes']
                 axs[i,j].set_axis_on()
                 #bar plot
                 axs[i,j].bar(class_names, array_mean.tolist(), yerr = array_se_list, capsize = 5, color=['skyblue', 'salmon'], edgecolor = 'black', alpha = 0.7)
-                axs[i,j].set_title(("+".join(h)) + '\n' + m, fontsize = 7, color='red')
+                axs[i,j].set_title(("+".join(self.data[m]['features'])) + '\n' + m, fontsize = 7, color='red')
                 axs[i, j].set_ylabel("f-score % ", fontsize = 8) 
                 axs[i,j].set_ylim(0, 120)
               except Exception as e:
@@ -280,54 +281,46 @@ class plot_data:
       # Show the plot
       #plt.show()
                 
+   
     '''
     input:
-    output: prob histogram two distribution random and exactly of accuracy
-    ''' 
-    def plot_boot_histograms(self, hormones,models):
-       fig, axs = plt.subplots(len(hormones), len(models), figsize=(20, 60)) 
-      
-       i = 0
-       for h in hormones:
-            j = 0
-            for m in models:
-                data_exactly = self.data[h][m]['accuracy'] 
-                data_random = self.data[h][m]['accuracy_boot_perm'] 
-                
-                
-                #extract those  values for alpha and those for beta
-                #take the probability of first class
-                data_exactly_list = [arr.item() for arr in data_exactly]
-                labels_exactly_list = ['true']*len(data_exactly_list)
-                data_random_list= [arr.item() for arr in  data_random]
-                labels_random_list = ['random']*len(data_random_list)
-                
-                #concatenate the two list
-                combined_list_data = data_exactly_list + data_random_list
-                combined_list_labels = labels_exactly_list + labels_random_list
-                
-                # Create a DataFrame
-                df = pd.DataFrame({'Category': combined_list_labels, 'Value': combined_list_data} )
-                sns.histplot(data = df ,x='Value', hue='Category', bins=50, kde=True, palette={'true': 'red', 'random': 'blue'}, multiple="stack",ax =axs[i,j])
-                #sns.histplot(x=first_elements_list, bins=100, kde=True, color = 'green',ax =axs[i,j])
-                # Customize the legend
-                legend_elements = [
-                    Line2D([0], [0], color='red', lw=2, label='true'),
-                    Line2D([0], [0], color='blue', lw=2, label='random')
-                ]
-                axs[i,j].legend(title="",handles = legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
-                axs[i,j].set_title(h + '\n' + m, fontsize = 7, color='red')
-               # plt.title("Grouped Histogram")
-                axs[i,j].set_xlabel("Accuracy true vs random" )
-                axs[i,j].set_ylabel("Counts")
-                j += 1
-            i += 1
-       fig.tight_layout(pad=5)
-       fig.suptitle('Hist_accuracy'+ '  ' + self.title, x=0.5, y=0.99) 
-       plt.savefig(self.output_directory + self.title + '_Histogram_Accuracy_truevsrandom' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')
-             # Show the plot
-       #plt.show()  
+    output: plot important features
+    '''   
+    def plot_important_features(self, hormones_list,models_list):
+        num_keys = len(hormones_list)
+        num_items = len(models_list)
+        
+        fig, axs = plt.subplots((num_keys+1) , (num_items +1),  figsize=((num_items+1)*6, (num_keys+1)*4)) #good 60
+        fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
+
+        # turn off the axes
+        for i in range((num_keys+1)):
+           for j in range((num_items+1)):
+               axs[i,j].set_axis_off()
        
+        i=0
+        for j, m in enumerate(models_list):
+              try:
+                list_mean = self.data[m]['mean_abs_shap_values']   
+                array_mean =np.mean(list_mean, axis =0) 
+                array_se = np.std(list_mean, axis=0, ddof=1)/np.sqrt(len(list_mean))
+                categories = self.data[m]['features']
+                sorted_indices = np.argsort(array_mean)[::1]
+                array_mean = array_mean[sorted_indices]
+                array_se = array_se[sorted_indices]
+                categories =[categories[i] for i in sorted_indices]
+                
+                axs[i,j].set_axis_on()
+                #bar plot
+                axs[i,j].barh(categories, array_mean, yerr = array_se, capsize = 10)
+                axs[i,j].set_title(("+".join(self.data[m]['features'])) + '\n' + m, fontsize = 7, color='red')
+                axs[i, j].set_xlabel("mean(abs(shap.values))", fontsize = 8) 
+                axs[i,j].yticks(fontsize=6)
+
+              except Exception as e:
+                  print("continue")
+        plt.savefig(self.output_directory + self.title + '_important_features' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')   
+                
     '''
        input: dictionary
        output: dataframe
@@ -338,38 +331,35 @@ class plot_data:
        
        
        for m, inner_dict in self.data.items():
-           print(f"key: {m}")
-           for h, value in inner_dict.items():
-                 print(f"  {h}")  
-                 class1 = str(value['classes'][0])
-                 class2 = str(value['classes'][1])
-                 data_dict['hormones'].append(h)
+                 class1 = str(inner_dict['classes'][0])
+                 class2 = str(inner_dict['classes'][1])
+                 data_dict['hormones'].append(tuple(inner_dict['features']))
                  data_dict['models'].append(m)                  
-                 data_dict['repetition_feature'].append(value['repetition_feature'])
+                 
                
-                 data_dict['accuracy'].append(100*np.mean(value['accuracy'],axis=0 ))
-                 data_dict['se_accuracy'].append(100*np.std(value['accuracy'], axis=0, ddof=1)/np.sqrt(len(value['accuracy'])))
+                 data_dict['accuracy'].append(100*np.mean(inner_dict['accuracy'],axis=0 ))
+                 data_dict['se_accuracy'].append(100*np.std(inner_dict['accuracy'], axis=0, ddof=1)/np.sqrt(len(inner_dict['accuracy'])))
                  
-                 data_dict['precision_' + class1].append((100*np.mean(value['precision'],axis=0 ))[0])
-                 data_dict['se_precision_' + class1].append((100*np.std(value['precision'], axis=0, ddof=1)/np.sqrt(len(value['precision'])))[0])
+                 data_dict['precision_' + class1].append((100*np.mean(inner_dict['precision'],axis=0 ))[0])
+                 data_dict['se_precision_' + class1].append((100*np.std(inner_dict['precision'], axis=0, ddof=1)/np.sqrt(len(inner_dict['precision'])))[0])
                  
-                 data_dict['precision_' + class2].append((100*np.mean(value['precision'],axis=0 ))[1])
-                 data_dict['se_precision_' + class2].append((100*np.std(value['precision'], axis=0, ddof=1)/np.sqrt(len(value['precision'])))[1])
+                 data_dict['precision_' + class2].append((100*np.mean(inner_dict['precision'],axis=0 ))[1])
+                 data_dict['se_precision_' + class2].append((100*np.std(inner_dict['precision'], axis=0, ddof=1)/np.sqrt(len(inner_dict['precision'])))[1])
                  
-                 data_dict['recall_' + class1].append((100*np.mean(value['recall'],axis=0 ))[0])
-                 data_dict['se_recall_' + class1].append((100*np.std(value['recall'], axis=0, ddof=1)/np.sqrt(len(value['recall'])))[0])
+                 data_dict['recall_' + class1].append((100*np.mean(inner_dict['recall'],axis=0 ))[0])
+                 data_dict['se_recall_' + class1].append((100*np.std(inner_dict['recall'], axis=0, ddof=1)/np.sqrt(len(inner_dict['recall'])))[0])
                  
-                 data_dict['recall_' + class2].append((100*np.mean(value['recall'],axis=0 ))[1])
-                 data_dict['se_recall_' + class2].append((100*np.std(value['recall'], axis=0, ddof=1)/np.sqrt(len(value['recall'])))[1])
+                 data_dict['recall_' + class2].append((100*np.mean(inner_dict['recall'],axis=0 ))[1])
+                 data_dict['se_recall_' + class2].append((100*np.std(inner_dict['recall'], axis=0, ddof=1)/np.sqrt(len(inner_dict['recall'])))[1])
                  
-                 data_dict['fscore_' + class1].append((100*np.mean(value['fscore'],axis=0 ))[0])
-                 data_dict['se_fscore_' + class1].append((100*np.std(value['fscore'], axis=0, ddof=1)/np.sqrt(len(value['fscore'])))[0])
+                 data_dict['fscore_' + class1].append((100*np.mean(inner_dict['fscore'],axis=0 ))[0])
+                 data_dict['se_fscore_' + class1].append((100*np.std(inner_dict['fscore'], axis=0, ddof=1)/np.sqrt(len(inner_dict['fscore'])))[0])
                  
-                 data_dict['fscore_' + class2].append((100*np.mean(value['fscore'],axis=0 ))[1])
-                 data_dict['se_fscore_' + class2].append((100*np.std(value['fscore'], axis=0, ddof=1)/np.sqrt(len(value['fscore'])))[1])
+                 data_dict['fscore_' + class2].append((100*np.mean(inner_dict['fscore'],axis=0 ))[1])
+                 data_dict['se_fscore_' + class2].append((100*np.std(inner_dict['fscore'], axis=0, ddof=1)/np.sqrt(len(inner_dict['fscore'])))[1])
                  
                  #confusion matrix
-                 sum_cm = np.sum(value['confusion_matrix'], axis=0)
+                 sum_cm = np.sum(inner_dict['confusion_matrix'], axis=0)
                  sum_rows = sum_cm.sum(axis=1, keepdims=True) 
                  fraction = (sum_cm/sum_rows)*100
                  data_dict['% true values' +  class2].append(fraction[1,1])
@@ -450,6 +440,7 @@ class plot_data:
           self.plot_recall(hormones_list,models_list)
           self.plot_f1score(hormones_list,models_list)
           self.plot_accuracy(hormones_list,models_list)
+         # self.plot_important_features(hormones_list,models_list)
        #   self.plot_prob(hormones_list,models_list)
       #  self.plot_boot_histograms(hormones,models)
 

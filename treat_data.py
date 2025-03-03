@@ -211,12 +211,13 @@ class treat_data:
              
              # Convert to frozenset to allow set comparison
              split_pair = (tuple(train_indices), tuple(test_indices))
-             # Check if the split already exists
+             # Check if the split already exists and has alpha
              if split_pair not in previous_splits:
-               previous_splits.append(split_pair) #store split pair
-               break #get out from the while loop
+               if y_test.str.replace(" ", "", regex=True).isin(['alpha']).any():
+                 previous_splits.append(split_pair) #store split pair
+                 break #get out from the while loop
              else:
-               print("duplicate split")
+               print("duplicate split or no alpha in test data")
                
         return X_train, X_test, y_train, y_test, previous_splits
     
@@ -234,11 +235,11 @@ class treat_data:
     input: selected data
     output : after splitting and learning get dictionary 
     '''
-    def train_learning(self,selected_data,normalization, model_name=None,n_repeats = None,choice = None,findFeatureMethod = None):
+    def train_learning(self,selected_data,normalization, model_name=None,n_repeats = None,choice = None,findFeatureMethod = None, hormones = None):
          previous_indices = []
          #create dictionary of the results
          results_dict = {}
-         prob , labels_pred , confusion_matrix , acc , prec ,rec , fscore, features = [], [], [], [], [], [], [],[]
+         prob , labels_pred , confusion_matrix , acc , prec ,rec , fscore, features  = [], [], [], [], [], [], [],[]
 
          for count in range(n_repeats):
             #get train  and test data and check that each split is unique
@@ -252,59 +253,68 @@ class treat_data:
                 
             #balance the train data by using smote
             X_train_resampled, y_train_resampled = self.balance_data(X_train_scaled,y_train)
+            #make correction  if there are ratios
+           # X_train_resampled = treat_data.addRatios(X_train_resampled,hormones)
             #Convert the categorical data into binary
             y_train_resampled, classes = self.label_encoded(y_train_resampled)
             
             y_test, classes = self.label_encoded(y_test)
             classes_real = list(classes)
-            
-             #select features for Xtrain
-            features_obj = Find_better_features(X_train_resampled,y_train_resampled,X_train)
-            try:
-                if findFeatureMethod == 'RFCEV':
-                  selected_features, index_features = features_obj(model_name)
-                elif findFeatureMethod == 'statistical':
-                    selected_features, index_features = features_obj.get_best_features_from_statiscal()
-                elif findFeatureMethod == 'shap':
-                     selected_features, index_features = features_obj.get_best_features_from_shapley_values(model_name)
-                
-                #learn the system take relevant features
-                new_obj = learning_data(X_train_resampled.iloc[:,index_features],X_test_scaled.iloc[:,index_features],y_train_resampled, y_test,model_name)
 
-                
-                #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
-                probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = new_obj()
-                a=1
-                prob.append(probabilities_test.astype(np.float32)), labels_pred.append(y_pred_test.astype(np.float32)), confusion_matrix.append(cm_test.astype(np.float32)), acc.append(accuracy_test.astype(np.float32)),prec.append(precision_test.astype(np.float32)), rec.append(recall_test.astype(np.float32)), 
-                fscore.append(f1_test.astype(np.float32)), features.append(selected_features.tolist())
-                print("round:", count)
-            except Exception as e:
-                print("no combination")
+            #train the model and get the metrics
+            new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model_name)
+            probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = new_obj()
+            features =X_train.columns.tolist()
+            #append principal variables in each iteration
+            prob.append(probabilities_test.astype(np.float32)), labels_pred.append(y_pred_test.astype(np.float32)), confusion_matrix.append(cm_test.astype(np.float32)), acc.append(accuracy_test.astype(np.float32)),prec.append(precision_test.astype(np.float32)), rec.append(recall_test.astype(np.float32)), 
+            fscore.append(f1_test.astype(np.float32)) # shap_values.append(shapValues),abs_mean_shap.append(meanAbsShap)
             
-         keys =['classes','features','prob','labels_pred','confusion_matrix','accuracy','precision','recall','fscore']
+            
+            
+                
+          
+         keys =['classes','features','prob','labels_pred','confusion_matrix','accuracy','precision','recall','fscore','shap_values','mean_abs_shap_values']
          values = [classes_real, features, prob, labels_pred, confusion_matrix, acc, prec, rec, fscore] 
          results_dict = dict(zip(keys, values))   
          #get unique features
-         unique_features, frequency_list, dict_index_per_feature = treat_data.find_unique_features(results_dict['features'])
-         filtered_feature,filtered_frequencies, filtered_indices_dict= treat_data.filter_data(unique_features, frequency_list, dict_index_per_feature,n_repeats )
-         #get for each feature important values
+        #  unique_features, frequency_list, dict_index_per_feature = treat_data.find_unique_features(results_dict['features'])
+        #  filtered_feature,filtered_frequencies, filtered_indices_dict= treat_data.filter_data(unique_features, frequency_list, dict_index_per_feature,n_repeats )
+        #  #get for each feature important values
 
-         new_dictionary = treat_data.get_dictionary_with_features(results_dict, filtered_feature,filtered_indices_dict,filtered_frequencies)
-         a=1
-         return new_dictionary
-    
-    
+        #  new_dictionary = treat_data.get_dictionary_with_features(results_dict, filtered_feature,filtered_indices_dict,filtered_frequencies)
+        #  a=1
+         return results_dict
+    '''
+    input : data
+    output: add ratios if there are
+    '''
+    @staticmethod
+    def addRatios(data, hormones):
+        result = [item for item in hormones if '_' in item]
+        if not result:
+          print("The list is empty")
+        else:
+         for r in result:
+          parts = r.split('_')
+          first_part = parts[0]
+          last_part = parts[-1]
+          data[r] = data[first_part]/data[last_part]
+        return data
+     
+          
+          
   
     def __call__(self,model = None,normalization = None,n_repeats = None, sex = None, choice = None,findFeatureMethod = None, hormones = None, architype = None): 
-        
          
+         #add ratios if there are
+         self.data = treat_data.addRatios(self.data,hormones)
          #select data to work with
          if choice == "2":
             selected_data = self.select_data(sex, choice, hormones)
          elif choice == "3":
             selected_data = self.select_data(sex, choice, hormones,architype)
             
-         results_dict = self.train_learning(selected_data, normalization, model,n_repeats,choice,findFeatureMethod)
+         results_dict = self.train_learning(selected_data, normalization, model,n_repeats,choice,findFeatureMethod, hormones)
          
          return results_dict   
          # if it is required randomize the data

@@ -14,6 +14,8 @@ from sklearn.ensemble import AdaBoostClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.metrics import mean_squared_error, r2_score
 import xgboost as xgb
+import shap
+
 
 
 
@@ -33,13 +35,13 @@ class learning_data:
       if self.model_name == "SVC_linear":
          model = SVC(kernel='linear', probability=True,random_state=42)    
       elif self.model_name == "SVC_rbf":
-         model = SVC(kernel='rbf',probability=True)
+         model = SVC(kernel='rbf',C=0.1, gamma = 0.1, class_weight = 'balanced',probability=True,random_state=42)
       elif self.model_name == "random_forest":
           model = RandomForestClassifier(n_estimators = 50, random_state=42, n_jobs = -1) 
           #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
       elif self.model_name == "logistic":
           model = LogisticRegression(max_iter=1000, random_state=42,penalty ='l2',C=0.1)
-      elif self.model_name == 'decision_tree':
+      elif self.model_name == "decision_tree":
           model = DecisionTreeClassifier(random_state=42)
       elif self.model_name == "k_neighbors":
           model = KNeighborsClassifier(n_neighbors=5)
@@ -50,34 +52,12 @@ class learning_data:
       elif self.model_name == "GaussianNB":
            model = GaussianNB()
       elif self.model_name == "xgboost":
-           xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
+           model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
             
       model.fit(self.X_train, self.y_train)
       return model
   
-    '''
-    input: training data of boostrap data
-    output: model of several............
-    '''
-    def train_model_b(self,X_bootstrap, y_bootstrap_permuted):
-      if self.model_name == "SVC_linear":
-         model = SVC(kernel='linear', probability=True,random_state=42)    
-      elif self.model_name == "SVC_rbf":
-         model = SVC(kernel='rbf',probability=True)
-      elif self.model_name == "random_forest":
-          model = RandomForestClassifier(random_state=42) 
-      elif self.model_name == "logistic":
-          model = LogisticRegression(max_iter=1000, random_state=42)
-      elif self.model_name == 'decision_tree':
-          model = DecisionTreeClassifier(random_state=42)
-      elif self.model_name == "GaussianNB":
-           model = GaussianNB()
-            
-      model.fit(X_bootstrap, y_bootstrap_permuted)
-      return model
-  
-  
-  
+   
   
     '''
     input: test data, model
@@ -85,25 +65,29 @@ class learning_data:
     '''
     def test_model(self,model):
         
-      probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = learning_data.calculate_metrics(self.X_test,self.y_test,model)
+      probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = self.calculate_metrics(self.X_test,self.y_test,model)
       #probabilities_train, accuracy_train,y_pred_train, classes,cm_train,precision_train,recall_train,f1_train = learning_data.calculate_metrics(self.X_train,self.y_train,model)
         
       return  probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test
     
     '''
-    input: train data
-    output : train data bootstrapped and the labels are permutated to break the relation between features and labels
-    '''
-    def randomize_train_data(self):
-        # Bootstrap sample
-        indices = np.random.choice(range(len(self.X_train)), size=len(self.X_train), replace=True)
-        X_bootstrap = self.X_train[indices]
-        y_bootstrap = self.y_train[indices] 
-        
-        # Permute labels to eliminate correlation
-        y_bootstrap_permuted = np.random.permutation(y_bootstrap)
-        
-        return X_bootstrap, y_bootstrap_permuted
+    input: test and model
+    output: better features with shap values
+    ''' 
+    def find_features(self, model):
+        #compute Shap values
+          explainer = shap.Explainer(model)
+          shap_values = explainer(self.X_test)
+          
+          #agregate shape values
+          if self.model_name == "xgboost":
+              mean_abs_shap = np.abs(shap_values.values).mean(axis=0) #take only dominant
+              shapValues = shap_values.values
+          else:
+              mean_abs_shap = np.abs(shap_values.values[:,:,1]).mean(axis=0) #take only dominant
+              shapValues = shap_values.values[:,:,1]
+              
+          return shapValues, mean_abs_shap
     
     '''
     input: model name
@@ -132,17 +116,21 @@ class learning_data:
            model = GaussianNB()
         
         return model
-     
+    
+   
     
     '''
      input: features and classification
      output metrics
-     '''
-    @staticmethod      
-    def calculate_metrics(X,y,model):
-      
+     '''      
+    def calculate_metrics(self,X,y,model):
+      custom_threshold = 0.4 #only for linear models
       y_pred = model.predict(X)
       probabilities = model.predict_proba(X)
+      #only for linear models to adjust trigger for alphs
+      # if self.model_name == "SVC_rbf":
+      #y_pred = (probabilities[:,1] >= custom_threshold).astype(int)
+      
       # Compute confusion matrix
       cm = confusion_matrix(y, y_pred)
       print("Confusion Matrix:\n", cm)
@@ -184,15 +172,6 @@ class learning_data:
         #original data
         model = self.train_model()
         probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test= self.test_model(model)
-        
-        #for bootstrapping
-        # n_bootstraps = 100
-        # permuted_accuracies = []
-        # for _ in range(n_bootstraps): # do several times
-        #     X_bootstrap, y_bootstrap_permuted = self.randomize_train_data()       
-        #     model_b = self.train_model_b(X_bootstrap, y_bootstrap_permuted )
-        #     probabilities_b, accuracy_b,y_pred_b, classes_b,cm_b,precision_b,recall_b,roc_auc_b,fpr_b,tpr_b, f1_b = self.test_model(model_b)
-        #     permuted_accuracies.append(accuracy_b)
-        # accuracies_bootstraps = np.mean(permuted_accuracies)
+        #shap_values, mean_abs_shap = self.find_features(model)
             
-        return probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test #,accuracies_bootstraps
+        return probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test # shap_values, mean_abs_shap

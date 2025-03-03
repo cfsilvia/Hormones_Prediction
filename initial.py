@@ -31,15 +31,15 @@ def main_menu(choice,data):
             output_file =data['2']['data_file']
             sex = data['2']['sex'] #female or all
             n_repeats = data['2']['n_repeats']
-            index_hormones = data['2']['index_hormones']
+            hormones = data['2']['hormones']
             output_directory = data['2']['output_directory']
             findFeatureMethod = data['2']['method_find_features']
             list_models = data['2']['models']
             normalization = data['2']['normalization']
             #hormones to use
-            table = pd.read_excel(output_file,sheet_name="All_data")
-            aux = table.columns
-            hormones_combination = aux[index_hormones].tolist()
+            # table = pd.read_excel(output_file,sheet_name="All_data")
+            # aux = table.columns
+            hormones_combination = hormones
            
             title_file = sex + "_" + type + "_" + str(n_repeats)
            #for randomization
