@@ -286,10 +286,32 @@ class treat_data:
          a=1
          return new_dictionary
     
-    
+    '''
+    input : data
+    output: add ratios if there are
+    '''
+    @staticmethod
+    def addRatios(data, hormones):
+        result = [item for item in hormones if '_' in item]
+        if not result:
+          print("The list is empty")
+        else:
+         for r in result:
+          parts = r.split('_')
+          first_part = parts[0]
+          last_part = parts[-1]
+          data[r] = data[first_part]/data[last_part]
+        return data    
+        
+        
+        
+        
+        
+        
   
     def __call__(self,model = None,n_repeats = None, sex = None, choice = None,findFeatureMethod = None, hormones = None, architype = None): 
-        
+         #add ratios if there are
+         self.data = treat_data.addRatios(self.data,hormones)
          
          #select data to work with
          if choice == "2":

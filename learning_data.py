@@ -113,7 +113,7 @@ class learning_data:
         elif model_name == "SVC_rbf":
          model = SVC(kernel='rbf',probability=True)
         elif model_name == "random_forest":
-          model = RandomForestClassifier(n_estimators = 200, random_state=42) 
+          model = RandomForestClassifier(n_estimators = 50, random_state=42) 
           #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
         elif model_name == "logistic":
           model = LogisticRegression(max_iter=1000, random_state=42,penalty ='l2',C=0.1)
