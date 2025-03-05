@@ -128,8 +128,9 @@ class learning_data:
       y_pred = model.predict(X)
       probabilities = model.predict_proba(X)
       #only for linear models to adjust trigger for alphs
-      # if self.model_name == "SVC_rbf":
-      #y_pred = (probabilities[:,1] >= custom_threshold).astype(int)
+     
+    #  if (self.model_name == "SVC_rbf") or (self.model_name == "SVC_linear") or (self.model_name == "logistic"):
+   #   y_pred = (probabilities[:,1] >= custom_threshold).astype(int)
       
       # Compute confusion matrix
       cm = confusion_matrix(y, y_pred)
