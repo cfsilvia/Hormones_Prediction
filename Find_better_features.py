@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from learning_data import learning_data
-from sklearn.feature_selection import RFECV
+from sklearn.feature_selection import RFECV, RFE
 from sklearn.metrics import make_scorer, f1_score
 from collections import Counter
 import pickle
@@ -108,7 +108,7 @@ class Find_better_features:
         kf = KFold(n_splits=num_folds)  
         p_val_features_fold = np.zeros(shape=(num_folds,self.X_train.shape[1]))
         n_fold = 0
-        threshold_pval = 0.1 #or 0.1
+        threshold_pval = 0.05 #or 0.1
         # Iterating over the splits
         for train_index, _ in kf.split(self.X_train):
             X_train_fold = self.X_train[train_index,:]
@@ -121,7 +121,8 @@ class Find_better_features:
         feature_selected_k_fold = np.average(p_val_features_fold, axis=0) < threshold_pval
         indexes_selected_features = np.where(feature_selected_k_fold)[0]
         selected_features = self.X_train_with_columns.columns[indexes_selected_features]
-        return selected_features, indexes_selected_features
+        print(selected_features)
+        return selected_features, feature_selected_k_fold
          
     def __call__(self,model_name = None):       
        
@@ -130,14 +131,43 @@ class Find_better_features:
                 #get model object
                 model = learning_data.model_definition(model_name)
                 # Specify 'I' as the positive class
-                f1_scorer = make_scorer(f1_score, pos_label= 1)
-                #do ten folds splitting
-                rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,shuffle=True), scoring=f1_scorer, n_jobs = -1)
-                rfecv.fit(self.X_train, self.y_train)
-                selected_features = self.X_train_with_columns.columns[rfecv.support_]
-                print("Optimal number of features:", rfecv.n_features_)
+                #for rfcev
+                # f1_scorer = make_scorer(f1_score, pos_label= 1)
+                # #do ten folds splitting
+                # rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(5,shuffle=True,random_state = 42), scoring=f1_scorer, n_jobs = -1)
+                # #rfecv = RFECV(estimator=model, step=1, cv=30, scoring=f1_scorer, min_features_to_select=1, n_jobs = -1)
+                # rfecv.fit(self.X_train, self.y_train)
+                # selected_features = self.X_train_with_columns.columns[rfecv.support_]
+                
+                #for rfe
+                rfe = RFE(estimator=model, n_features_to_select=10, step=1)
+                rfe.fit(self.X_train, self.y_train)
+                selected_features = self.X_train_with_columns.columns[rfe.support_]
+                
+                print("Optimal number of features:", rfe.n_features_)
                 print("Selected features:", selected_features)
             except Exception as e:
                 print(f"An error ocurred: {e}")
         
-            return selected_features,rfecv.support_
+            return selected_features,rfe.support_
+    '''
+    input: original data
+    output: shap values
+    '''
+    @staticmethod
+    def GetShapValues(X,y,model_name):
+        final_model = learning_data.model_definition(model_name)
+        final_model.fit(X,y)
+        
+        if (model_name == "random_forest") or (model_name == "decision_tree"):
+            explainer = shap.TreeExplainer(final_model)
+            shap_values = explainer.shap_values(X)[:,:,1]
+            #agregate shape values
+            mean_abs_shap = np.abs(shap_values).mean(axis=0)
+        else:
+            explainer = shap.Explainer(final_model, X)
+            shap_values = explainer(X)
+            shap_values = shap_values.data
+            mean_abs_shap = np.abs(shap_values).mean(axis=0)
+            
+        return mean_abs_shap

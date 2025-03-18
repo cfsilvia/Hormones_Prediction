@@ -5,15 +5,17 @@ import matplotlib
 import pandas as pd
 from matplotlib.lines import Line2D
 from collections import defaultdict
+import shap
 #matplotlib.use('TkAgg') 
 #plt.ion() # Turn on the interactive mode
 
 
 class plot_data:
-    def __init__(self,data,title,output_directory):
+    def __init__(self,data,title,output_directory,sex):
         self.data = data
         self.title = title
         self.output_directory = output_directory
+        self.sex = sex
     '''
     input:
     output: prob histogram
@@ -331,45 +333,116 @@ class plot_data:
        
        
        for m, inner_dict in self.data.items():
+                 data_dict['sex'] = self.sex
                  class1 = str(inner_dict['classes'][0])
                  class2 = str(inner_dict['classes'][1])
+                 data_dict['class 1'].append(str(inner_dict['classes'][0]))
+                 data_dict['class 2'].append(str(inner_dict['classes'][1]))
                  data_dict['hormones'].append(tuple(inner_dict['features']))
                  data_dict['models'].append(m)                  
+                 data_dict['confusion_matrix'].append(inner_dict['confusion_matrix'])
+                 data_dict['fscore_' + 'class 1'].append((100*(inner_dict['fscore'] ))[0])
+                 data_dict['fscore_' + 'class 2'].append((100*(inner_dict['fscore'] ))[1])
                  
                
-                 data_dict['accuracy'].append(100*np.mean(inner_dict['accuracy'],axis=0 ))
-                 data_dict['se_accuracy'].append(100*np.std(inner_dict['accuracy'], axis=0, ddof=1)/np.sqrt(len(inner_dict['accuracy'])))
+                 data_dict['accuracy'].append(100*(inner_dict['accuracy'] ))
+                 data_dict['balanced_accuracy'].append(100*(inner_dict['balanced_accuracy'] ))
+                # data_dict['se_accuracy'].append(100*np.std(inner_dict['accuracy'], axis=0, ddof=1)/np.sqrt(len(inner_dict['accuracy'])))
+                 data_dict['roc_auc'].append(100*(inner_dict['roc_auc'] ))
+                
+                 data_dict['precision_' + 'class 1'].append((100*(inner_dict['precision']))[0])
+               #  data_dict['se_precision_' + class1].append((100*np.std(inner_dict['precision'], axis=0, ddof=1)/np.sqrt(len(inner_dict['precision'])))[0])
                  
-                 data_dict['precision_' + class1].append((100*np.mean(inner_dict['precision'],axis=0 ))[0])
-                 data_dict['se_precision_' + class1].append((100*np.std(inner_dict['precision'], axis=0, ddof=1)/np.sqrt(len(inner_dict['precision'])))[0])
+                 data_dict['precision_' + 'class 2'].append((100*(inner_dict['precision'] ))[1])
+                # data_dict['se_precision_' + class2].append((100*np.std(inner_dict['precision'], axis=0, ddof=1)/np.sqrt(len(inner_dict['precision'])))[1])
                  
-                 data_dict['precision_' + class2].append((100*np.mean(inner_dict['precision'],axis=0 ))[1])
-                 data_dict['se_precision_' + class2].append((100*np.std(inner_dict['precision'], axis=0, ddof=1)/np.sqrt(len(inner_dict['precision'])))[1])
+                 data_dict['recall_' + 'class 1'].append((100*(inner_dict['recall'] ))[0])
+                 #data_dict['se_recall_' + class1].append((100*np.std(inner_dict['recall'], axis=0, ddof=1)/np.sqrt(len(inner_dict['recall'])))[0])
                  
-                 data_dict['recall_' + class1].append((100*np.mean(inner_dict['recall'],axis=0 ))[0])
-                 data_dict['se_recall_' + class1].append((100*np.std(inner_dict['recall'], axis=0, ddof=1)/np.sqrt(len(inner_dict['recall'])))[0])
+                 data_dict['recall_' +'class 2'].append((100*(inner_dict['recall'] ))[1])
+                 #data_dict['se_recall_' + class2].append((100*np.std(inner_dict['recall'], axis=0, ddof=1)/np.sqrt(len(inner_dict['recall'])))[1])
                  
-                 data_dict['recall_' + class2].append((100*np.mean(inner_dict['recall'],axis=0 ))[1])
-                 data_dict['se_recall_' + class2].append((100*np.std(inner_dict['recall'], axis=0, ddof=1)/np.sqrt(len(inner_dict['recall'])))[1])
+                
+                # data_dict['se_fscore_' + class1].append((100*np.std(inner_dict['fscore'], axis=0, ddof=1)/np.sqrt(len(inner_dict['fscore'])))[0])
                  
-                 data_dict['fscore_' + class1].append((100*np.mean(inner_dict['fscore'],axis=0 ))[0])
-                 data_dict['se_fscore_' + class1].append((100*np.std(inner_dict['fscore'], axis=0, ddof=1)/np.sqrt(len(inner_dict['fscore'])))[0])
-                 
-                 data_dict['fscore_' + class2].append((100*np.mean(inner_dict['fscore'],axis=0 ))[1])
-                 data_dict['se_fscore_' + class2].append((100*np.std(inner_dict['fscore'], axis=0, ddof=1)/np.sqrt(len(inner_dict['fscore'])))[1])
+                
+                 #data_dict['se_fscore_' + class2].append((100*np.std(inner_dict['fscore'], axis=0, ddof=1)/np.sqrt(len(inner_dict['fscore'])))[1])
                  
                  #confusion matrix
-                 sum_cm = np.sum(inner_dict['confusion_matrix'], axis=0)
-                 sum_rows = sum_cm.sum(axis=1, keepdims=True) 
-                 fraction = (sum_cm/sum_rows)*100
-                 data_dict['% true values' +  class2].append(fraction[1,1])
-                 data_dict['% true values' + class1].append(fraction[0,0])
+                 sum_cm = np.sum(inner_dict['confusion_matrix'], axis=1)
+                 
+                 data_dict['% true values' +  'class 1'].append(inner_dict['confusion_matrix'][0,0]*100/sum_cm[0])
+                 data_dict['% true values' + 'class 2'].append(inner_dict['confusion_matrix'][1,1]*100/sum_cm[1])
+                 
+                 
+                 
                  
                          
         #  Convert into dataframe
         
        total_data = pd.DataFrame(data_dict)
        return   total_data,data_dict
+    
+    '''
+       input: dictionary
+       output: dataframe
+      ''' 
+    def create_table_before(self):
+       # Create a dictionary where values are empty lists by default
+       data_dict = defaultdict(list)
+       
+       
+       for m, inner_dict in self.data.items():
+                 data_dict['sex'] = self.sex
+                 class1 = str(inner_dict['classes'][0])
+                 class2 = str(inner_dict['classes'][1])
+                 data_dict['class 1'].append(str(inner_dict['classes'][0]))
+                 data_dict['class 2'].append(str(inner_dict['classes'][1]))
+                 data_dict['hormones'].append(tuple(inner_dict['features_before']))
+                 data_dict['models'].append(m)                  
+                 data_dict['confusion_matrix'].append(inner_dict['confusion_matrix_b'])
+                 data_dict['fscore_' + 'class 1'].append((100*(inner_dict['fscore_b'] ))[0])
+                 data_dict['fscore_' + 'class 2'].append((100*(inner_dict['fscore_b'] ))[1])
+                 
+               
+                 data_dict['accuracy'].append(100*(inner_dict['accuracy_b'] ))
+                 data_dict['balanced_accuracy'].append(100*(inner_dict['balanced_accuracy_b'] ))
+                # data_dict['se_accuracy'].append(100*np.std(inner_dict['accuracy'], axis=0, ddof=1)/np.sqrt(len(inner_dict['accuracy'])))
+                 data_dict['roc_auc'].append(100*(inner_dict['roc_auc_b'] ))
+                
+                 data_dict['precision_' + 'class 1'].append((100*(inner_dict['precision_b']))[0])
+               #  data_dict['se_precision_' + class1].append((100*np.std(inner_dict['precision'], axis=0, ddof=1)/np.sqrt(len(inner_dict['precision'])))[0])
+                 
+                 data_dict['precision_' + 'class 2'].append((100*(inner_dict['precision_b'] ))[1])
+                # data_dict['se_precision_' + class2].append((100*np.std(inner_dict['precision'], axis=0, ddof=1)/np.sqrt(len(inner_dict['precision'])))[1])
+                 
+                 data_dict['recall_' + 'class 1'].append((100*(inner_dict['recall_b'] ))[0])
+                 #data_dict['se_recall_' + class1].append((100*np.std(inner_dict['recall'], axis=0, ddof=1)/np.sqrt(len(inner_dict['recall'])))[0])
+                 
+                 data_dict['recall_' +'class 2'].append((100*(inner_dict['recall_b'] ))[1])
+                 #data_dict['se_recall_' + class2].append((100*np.std(inner_dict['recall'], axis=0, ddof=1)/np.sqrt(len(inner_dict['recall'])))[1])
+                 
+                
+                # data_dict['se_fscore_' + class1].append((100*np.std(inner_dict['fscore'], axis=0, ddof=1)/np.sqrt(len(inner_dict['fscore'])))[0])
+                 
+                
+                 #data_dict['se_fscore_' + class2].append((100*np.std(inner_dict['fscore'], axis=0, ddof=1)/np.sqrt(len(inner_dict['fscore'])))[1])
+                 
+                 #confusion matrix
+                 sum_cm = np.sum(inner_dict['confusion_matrix_b'], axis=1)
+                 
+                 data_dict['% true values' +  'class 1'].append(inner_dict['confusion_matrix_b'][0,0]*100/sum_cm[0])
+                 data_dict['% true values' + 'class 2'].append(inner_dict['confusion_matrix_b'][1,1]*100/sum_cm[1])
+                 
+                 
+                 
+                 
+                         
+        #  Convert into dataframe
+        
+       total_data = pd.DataFrame(data_dict)
+       return   total_data,data_dict
+    
     
     '''
     input: total filter
@@ -418,12 +491,43 @@ class plot_data:
                 plot_data.separate_keys(value, level + 1, result)
         
         return result
+    '''
+    plot important features
+    '''
+    def PlotFeaturesShap(self,hormones_list,models_list):
+      num_keys = len(hormones_list)
+      num_items = len(models_list)
+        
+      fig, axs = plt.subplots((num_keys+1) , (num_items +1),  figsize=((num_items+1)*6, (num_keys+1)*4)) #good 60
+      fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
 
-        
-        
+        # turn off the axes
+      for i in range((num_keys+1)):
+           for j in range((num_items+1)):
+               axs[i,j].set_axis_off()
+       
+      i=0
+      for j, m in enumerate(models_list):
+         
+          shap_values = self.data[m]['shap_values']
+          categories = self.data[m]['features']
+          sorted_indices = np.argsort(shap_values)[::1]
+          shap_values_sort = shap_values[sorted_indices]
+          
+          categories =[categories[i] for i in sorted_indices]
+          
+          axs[i,j].set_axis_on()
+          axs[i,j].barh(categories, shap_values_sort)
+          axs[i,j].set_title(("+".join(self.data[m]['features'])) + '\n' + m, fontsize = 7, color='red')
+          axs[i, j].set_xlabel("abs(shap.values)", fontsize = 8) 
+          #axs[i,j].yticks(fontsize=6)
+      plt.savefig(self.output_directory + self.title + '_important_features' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')        
+           
     def __call__(self,select_column_prob):
       
         total_data, data_dict = self.create_table()
+        total_data_before, data_dict_before = self.create_table_before()
+        
         #filter data according to confusion matrix
         # total_data_filter_confusion = self.filter_confusion(total_data, class1,class2)
         # total_data_filter_all = self.filter_precision(total_data_filter_confusion, class1,class2)
@@ -433,17 +537,18 @@ class plot_data:
         #list hormones
         hormones_list = list(set(data_dict['hormones']))
         models_list = list(set(data_dict['models']))
+       # self.PlotFeaturesShap(hormones_list, models_list)
         
-        if not total_data.empty:
-          self.plot_confusion_matrix(hormones_list,models_list)
-          self.plot_precision(hormones_list,models_list)
-          self.plot_recall(hormones_list,models_list)
-          self.plot_f1score(hormones_list,models_list)
-          self.plot_accuracy(hormones_list,models_list)
+        # if not total_data.empty:
+        #   self.plot_confusion_matrix(hormones_list,models_list)
+        #   self.plot_precision(hormones_list,models_list)
+        #   self.plot_recall(hormones_list,models_list)
+        #   self.plot_f1score(hormones_list,models_list)
+        #   self.plot_accuracy(hormones_list,models_list)
          # self.plot_important_features(hormones_list,models_list)
        #   self.plot_prob(hormones_list,models_list)
       #  self.plot_boot_histograms(hormones,models)
 
 
-        return total_data
+        return total_data, total_data_before
      

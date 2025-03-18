@@ -10,6 +10,7 @@ from treat_random_data import treat_random_data
 import yaml
 from memory_profiler import profile
 import Auxiliary_functions
+import os
 #from sklearn.ensemble import AdaBoostClassifier
 @profile
 def main_menu(choice,data):
@@ -36,12 +37,14 @@ def main_menu(choice,data):
             findFeatureMethod = data['2']['method_find_features']
             list_models = data['2']['models']
             normalization = data['2']['normalization']
+            select_pairs = data['2']['select_pairs']
+            change_status = data['2']['change_status']
             #hormones to use
             # table = pd.read_excel(output_file,sheet_name="All_data")
             # aux = table.columns
             hormones_combination = hormones
            
-            title_file = sex + "_" + type + "_" + str(n_repeats)
+            
            #for randomization
             #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
             #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
@@ -50,21 +53,23 @@ def main_menu(choice,data):
            
 
             #model_dict ={}
-            
-                    
-            for model in list_models:
+            for  p in select_pairs:
+                title_file = sex + "_" + type + "_" + '_'.join(p)   
+                print('_'.join(p) )   
+                for model in list_models:
                         model_dict ={}
-                        new_obj = treat_data(output_file)
+                        new_obj = treat_data(output_file,p,change_status)
                         results_dict = new_obj(model, normalization, n_repeats,sex,choice,findFeatureMethod,hormones_combination)
                         print(model)
                         model_dict[model] = results_dict # for each model there is a dictionary
                         filename = output_directory + title_file + '.pkl'
                         Auxiliary_functions.save_part_of_dict(filename, model, model_dict)
+
                         a=1
                        
-                    
+           # filename = output_directory + title_file + '.pkl'        
             # # Save the dictionary
-            # with open(output_directory + title_file + '.pkl', 'wb') as f:
+           # with open(output_directory + title_file + '.pkl', 'wb') as f:
             #     pickle.dump(model_dict, f,protocol=pickle.HIGHEST_PROTOCOL)
                 
      
@@ -93,6 +98,7 @@ def main_menu(choice,data):
                     results_dict = new_obj(model, n_repeats,sex,choice,hormones_combination[count],type)
                     model_dict[model] = results_dict # for each model there is a dictionary
                     key_hormones = "-".join(hormones_combination[count])
+                    
                     hormones_dict[key_hormones] = model_dict
                     
             # # Save the dictionary
@@ -106,20 +112,28 @@ def main_menu(choice,data):
             sex = data['4']['sex']
             n_repeats = data['4']['n_repeats']
             ouput_directory = data['4']['output_directory']
+            select_pairs = data['4']['select_pairs']
             select_column_prob = 1
-            title_file = sex + "_" + type + "_" + str(n_repeats)
-            # Load the Pickle file
-            with open(ouput_directory + title_file + '.pkl', "rb") as f:
-                data = pickle.load(f)
+            total_data_final = pd.DataFrame()
+            total_data_before_final = pd.DataFrame()
+            for  p in select_pairs:
+                title_file = sex + "_" + type + "_" + '_'.join(p)  
+                # Load the Pickle file
+                with open(ouput_directory + title_file + '.pkl', "rb") as f:
+                   data = pickle.load(f)
                 
-            new_obj = plot_data(data, title_file, ouput_directory)
-            total_data = new_obj(select_column_prob)
-           
-            
-            with pd.ExcelWriter(ouput_directory + title_file  + '.xlsx') as writer:
-                total_data.to_excel(writer, sheet_name='all_predictions', index=False)
-               # total_data_filter_confusion.to_excel(writer, sheet_name='all_confusion_filter', index=False)
-                #total_data_filter_all.to_excel(writer, sheet_name='final_data', index=False)
+                new_obj = plot_data(data, title_file, ouput_directory,sex)
+                total_data, total_data_before = new_obj(select_column_prob)
+                total_data_final = pd.concat([total_data_final, total_data], axis=0)
+                total_data_before_final = pd.concat([total_data_before_final, total_data_before], axis=0)
+            mode = 'a' if os.path.exists(ouput_directory +  "_" + type + '.xlsx') else 'w'
+            with pd.ExcelWriter(ouput_directory +  "_" + type + '.xlsx',mode=mode) as writer:
+                total_data_final.to_excel(writer, sheet_name=sex, index=False)
+            #save before features selection    
+            mode = 'a' if os.path.exists(ouput_directory +  "_" + "before_" + type + '.xlsx') else 'w'
+            with pd.ExcelWriter(ouput_directory +  "_" + "before_" + type + '.xlsx',mode=mode) as writer:
+                total_data_before_final.to_excel(writer, sheet_name=sex, index=False)
+              
 
         elif choice == "5":
                  type = data['5']['type']

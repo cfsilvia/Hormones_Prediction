@@ -12,7 +12,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score,balanced_accuracy_score
 import xgboost as xgb
 import shap
 
@@ -37,7 +37,7 @@ class learning_data:
       elif self.model_name == "SVC_rbf":
          model = SVC(kernel='rbf',C=0.1, gamma = 0.1, class_weight = 'balanced',probability=True,random_state=42)
       elif self.model_name == "random_forest":
-          model = RandomForestClassifier(n_estimators = 50, random_state=42, n_jobs = -1) 
+          model = RandomForestClassifier(n_estimators = 50, random_state=42, n_jobs = -1) #it was 50
           #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
       elif self.model_name == "logistic":
           model = LogisticRegression(max_iter=1000, random_state=42,penalty ='l2',C=0.1)
@@ -52,6 +52,7 @@ class learning_data:
       elif self.model_name == "GaussianNB":
            model = GaussianNB()
       elif self.model_name == "xgboost":
+           #model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
            model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
             
       model.fit(self.X_train, self.y_train)
@@ -95,34 +96,47 @@ class learning_data:
     '''
     @staticmethod
     def model_definition(model_name):
-        if model_name == "SVC_linear":
+      if model_name == "SVC_linear":
          model = SVC(kernel='linear', probability=True,random_state=42)    
-        elif model_name == "SVC_rbf":
-         model = SVC(kernel='rbf',probability=True)
-        elif model_name == "random_forest":
-          model = RandomForestClassifier(n_estimators = 20, random_state=42) 
+      elif model_name == "SVC_rbf":
+         model = SVC(kernel='rbf',C=0.1, gamma = 0.1, class_weight = 'balanced',probability=True,random_state=42)
+      elif model_name == "random_forest":
+          model = RandomForestClassifier(n_estimators = 50, random_state=42, n_jobs = -1) #it was 50
           #rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
-        elif model_name == "logistic":
+      elif model_name == "logistic":
           model = LogisticRegression(max_iter=1000, random_state=42,penalty ='l2',C=0.1)
-        elif model_name == 'decision_tree':
+      elif model_name == "decision_tree":
           model = DecisionTreeClassifier(random_state=42)
-        elif model_name == "k_neighbors":
+      elif model_name == "k_neighbors":
           model = KNeighborsClassifier(n_neighbors=5)
-        elif model_name == "adaboost":
+      elif model_name == "adaboost":
           model = AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=1), n_estimators=50, random_state=42)
-        elif model_name == "qda":
+      elif model_name == "qda":
           model = QuadraticDiscriminantAnalysis()
-        elif model_name == "GaussianNB":
+      elif model_name == "GaussianNB":
            model = GaussianNB()
+      elif model_name == "xgboost":
+           #model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
+           model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
         
-        return model
+      return model
     
-   
+    '''
+    input: test data
+    output: get prob
+    '''
+    def simple_test_model(self,model):
+      
+      y_pred = model.predict(self.X_test)
+      y_prob = model.predict_proba(self.X_test)
+      
+      return y_pred, y_prob, self.y_test
     
     '''
      input: features and classification
      output metrics
-     '''      
+     ''' 
+    @staticmethod     
     def calculate_metrics(self,X,y,model):
       custom_threshold = 0.4 #only for linear models
       y_pred = model.predict(X)
@@ -168,11 +182,51 @@ class learning_data:
         
       return probabilities, accuracy,y_pred, classes,cm,precision,recall,f1
         
+    '''
+     input: features and classification
+     output metrics
+     '''      
+    def metrics(predictions,predicted_probs,true_labels,model):
+      custom_threshold = 0.5 #by default it is 0.5
+      #predictions = learning_data.refine_predictions(predictions, predicted_probs,custom_threshold)
+    #  if (self.model_name == "SVC_rbf") or (self.model_name == "SVC_linear") or (self.model_name == "logistic"):
+      #predictions = (class2_probs >= custom_threshold).astype(int)
+      
+      # Compute confusion matrix
+      cm = confusion_matrix(true_labels, predictions)
+      print("Confusion Matrix:\n", cm)
+        # Calculate precision, recall, and F1-score-for each class
+      precision, recall, f1, _ = precision_recall_fscore_support(true_labels, predictions,zero_division=0, average=None,)
+      print("\nClassification Report:\n", classification_report(true_labels, predictions,zero_division=0))
+        
+      # Extract TP, TN, FP, FN
+      TP = cm[1, 1]
+      TN = cm[0, 0]
+      FP = cm[0, 1]
+      FN = cm[1, 0]
 
+      # Calculate accuracy
+      accuracy = (TP + TN) / np.sum(cm)
+      balanced_acc = balanced_accuracy_score(true_labels, predictions)
+      class1_probs = [arr[0][1] for arr in predicted_probs]
+      roc_auc = roc_auc_score(true_labels, class1_probs)
+      #classes = model.classes_
+      
+      return accuracy, precision,recall, f1,cm, balanced_acc,roc_auc
+    
+    def refine_predictions(predictions, predicted_probs,custom_threshold):
+      for i,arr in enumerate(predicted_probs):
+        if arr[0][1] >= custom_threshold:
+          predictions[i] = np.ones(1,dtype=int)
+        
+      return predictions
+    
     def __call__(self):
         #original data
         model = self.train_model()
-        probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test= self.test_model(model)
+        #probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test= self.test_model(model)
         #shap_values, mean_abs_shap = self.find_features(model)
-            
-        return probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test # shap_values, mean_abs_shap
+        y_pred, y_prob, y_test = self.simple_test_model(model)
+        
+        return y_pred, y_prob, y_test   
+        #return probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test # shap_values, mean_abs_shap
