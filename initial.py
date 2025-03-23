@@ -7,6 +7,7 @@ from plot_data import plot_data
 from treat_validation_data import treat_validation_data
 from Find_better_features import Find_better_features
 from treat_random_data import treat_random_data
+from General_functions import General_functions
 import yaml
 from memory_profiler import profile
 import Auxiliary_functions
@@ -193,8 +194,13 @@ def main_menu(choice,data):
             df= pd.DataFrame(hormones_dict)
             df.to_excel(output_file)
             
-                 
-      
+        elif choice == '7': #plot tsne
+            input_file = data['7']['data_file']
+            sex = data['7']['sex']
+            hormones = data['7']['hormones']
+            output_directory = data['7']['output_directory']         
+            new_obj = General_functions(input_file)
+            new_obj(sex,hormones)
         else:
             print("Invalid choice. Please try again.")
 
