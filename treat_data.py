@@ -267,7 +267,7 @@ class treat_data:
          threshold_ratio = 0.6
          #create dictionary of the results
          results_dict = {}
-         predictions,predicted_probs,true_labels, features,predictions_b,predicted_probs_b  = [], [], [], [],[],[]
+         predictions,predicted_probs,true_labels, all_shap_values  = [], [], [], []
          # Set up Leave-One-Out Cross-Validation (LOOCV)
          loo = LeaveOneOut()
          
@@ -288,8 +288,7 @@ class treat_data:
                 
             #balance the train data by using smote
             X_train_resampled, y_train_resampled = self.balance_data(X_train_scaled,y_train)
-            #make correction  if there are ratios
-           # X_train_resampled = treat_data.addRatios(X_train_resampled,hormones)
+           
             #Convert the categorical data into binary
             y_train_resampled, classes = self.label_encoded(y_train_resampled)
             classes_real = list(classes)
@@ -297,60 +296,44 @@ class treat_data:
             #check before
             new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model_name)
                 
-            y_pred_b, y_prob_b, y_test = new_obj()
+            y_pred, y_prob, y_test, shap_values= new_obj()
                 
-            predictions_b.append(y_pred_b)
-            predicted_probs_b.append(y_prob_b)
+            predictions.append(y_pred)
+            predicted_probs.append(y_prob)
+            true_labels.append(y_test)
+            all_shap_values.append(shap_values)
             
              #   
+             
 
-            #select features for Xtrain
-            features_obj = Find_better_features(X_train_resampled,y_train_resampled,X_train)
-            try:
-                if findFeatureMethod == 'RFCEV':
-                  selected_features, index_features = features_obj(model_name)
-                elif findFeatureMethod == 'statistical':
-                    selected_features, index_features = features_obj.get_best_features_from_statiscal()
-                # Update feature selection frequency counts.
-                feature_counts += index_features.astype(int)
-                #learn the system take relevant features
-                new_obj = learning_data(X_train_resampled[:,index_features],X_test_scaled[:,index_features],y_train_resampled, y_test,model_name)
-                
-                y_pred, y_prob, y_test = new_obj()
-                
-                predictions.append(y_pred)
-                predicted_probs.append(y_prob)
-                true_labels.append(y_test)
-                
-                #probabilities, accuracy,y_pred, classes,cm,precision,recall,roc_auc,fpr,tpr,f1 ,accuracies_bootstraps = new_obj()
-                # probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test = new_obj()
-                # a=1
-                # prob.append(probabilities_test.astype(np.float32)), labels_pred.append(y_pred_test.astype(np.float32)), confusion_matrix.append(cm_test.astype(np.float32)), acc.append(accuracy_test.astype(np.float32)),prec.append(precision_test.astype(np.float32)), rec.append(recall_test.astype(np.float32)), 
-                # fscore.append(f1_test.astype(np.float32)), features.append(selected_features.tolist())
+            # #select features for Xtrain
+            # features_obj = Find_better_features(X_train_resampled,y_train_resampled,X_train)
+            # try:
+            #     if findFeatureMethod == 'RFCEV':
+            #       selected_features, index_features = features_obj(model_name)
+            #     elif findFeatureMethod == 'statistical':
+            #         selected_features, index_features = features_obj.get_best_features_from_statiscal()
+            #     elif findFeatureMethod == 'Shap':
+            #     # Update feature selection frequency counts.
+            #     feature_counts += index_features.astype(int)
               
-            except Exception as e:
-                print("no combination")
+            # except Exception as e:
+            #     print("no combination")
           
          #get better features   
          #stable_feature_indices = np.where(feature_counts / loo.get_n_splits(X, y) >= threshold_ratio)[0] 
-         stable_feature_indices = np.argsort(feature_counts)[::-1]
-         stable_feature_names = [X.columns[i] for i in stable_feature_indices[:10]] #only 10 features
-         shap_values = []
-         #encoded y 
+        #  stable_feature_indices = np.argsort(feature_counts)[::-1]
+        #  stable_feature_names = [X.columns[i] for i in stable_feature_indices[:10]] #only 10 features
+        #  shap_values = []
+        #  #encoded y 
          y, _ = self.label_encoded(y)
          #get shap values of the final model with stable features
      #    shap_values = Find_better_features.GetShapValues(X[stable_feature_names],y,model_name)
-          
-         # Calculate performance metrics over all LOOCV iterations.
-         #before features selection
-         accuracy_b, precision_b,recall_b, fscore_b,cm_b, balanced_acc_b,roc_auc_b = learning_data.metrics(predictions_b,predicted_probs_b,true_labels,model_name)     
-         #after feature selection 
+
          accuracy, precision,recall, fscore,cm, balanced_acc,roc_auc = learning_data.metrics(predictions,predicted_probs,true_labels,model_name)     
          #Found the stable features  
-         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','roc_auc','shap_values','data_features',
-                'features_before','confusion_matrix_b','accuracy_b','balanced_accuracy_b','precision_b','recall_b','fscore_b','roc_auc_b']
-         values = [classes_real,  stable_feature_names, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, fscore,roc_auc, shap_values,X[stable_feature_names],
-                   X.columns,cm_b,accuracy_b,balanced_acc_b, precision_b, recall_b, fscore_b,roc_auc_b] 
+         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','roc_auc','shap_values','data_features']
+         values = [classes_real, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, fscore,roc_auc, all_shap_values,X]                 
          results_dict = dict(zip(keys, values))   
          #get unique features
         #  unique_features, frequency_list, dict_index_per_feature = treat_data.find_unique_features(results_dict['features'])
@@ -377,8 +360,33 @@ class treat_data:
           data[r] = data[first_part]/data[last_part]
         return data
      
-          
-          
+     
+    '''
+     input_data: shuffled data
+     output_data: Fscore for each shuffle
+     '''
+    def  add_shuffling(self,selected_data,normalization, model,n_repeats,choice,findFeatureMethod, hormones):
+           n_iterations = 1000
+           permutations = set()
+           # Create a generator with a fixed seed assure different permutation each time
+           rng = np.random.default_rng(42)
+           all_fscore_class1 = []
+           all_fscore_class2 = []
+           
+           for i in range(n_iterations):
+                df_permutated = selected_data.copy()
+                 #permutate only the status
+                df_permutated['status'] = rng.permutation(df_permutated['status'])
+                results_dict = self.train_learning(df_permutated, normalization, model,n_repeats,choice,findFeatureMethod, hormones)
+                fscore = results_dict['fscore']
+                all_fscore_class1.append(fscore[0])
+                all_fscore_class2.append(fscore[1])
+                
+
+           return all_fscore_class1, all_fscore_class2
+                
+                
+
   
     def __call__(self,model = None,normalization = None,n_repeats = None, sex = None, choice = None,findFeatureMethod = None, hormones = None, architype = None): 
          
@@ -391,6 +399,15 @@ class treat_data:
             selected_data = self.select_data(sex, choice, hormones,architype)
             
          results_dict = self.train_learning(selected_data, normalization, model,n_repeats,choice,findFeatureMethod, hormones)
+         list_fscore = results_dict['fscore']
+         #add shuffling 
+         if (list_fscore[0] >= 0.6) and (list_fscore[1] >= 0.6):
+             all_fscore_class1, all_fscore_class2 = self.add_shuffling(selected_data,normalization, model,n_repeats,choice,findFeatureMethod, hormones)
+             results_dict['shuffle_fscore_class1'] = all_fscore_class1
+             results_dict['shuffle_fscore_class2'] = all_fscore_class2
+         else:
+             results_dict['shuffle_fscore_class1'] = []
+             results_dict['shuffle_fscore_class2'] = []
          
          return results_dict   
          # if it is required randomize the data

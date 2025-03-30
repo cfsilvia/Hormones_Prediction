@@ -76,19 +76,22 @@ class learning_data:
     output: better features with shap values
     ''' 
     def find_features(self, model):
-        #compute Shap values
-          explainer = shap.Explainer(model)
-          shap_values = explainer(self.X_test)
+        
           
           #agregate shape values
           if self.model_name == "xgboost":
-              mean_abs_shap = np.abs(shap_values.values).mean(axis=0) #take only dominant
-              shapValues = shap_values.values
+              explainer = shap.TreeExplainer(model)
+              shap_values = explainer.shap_values(self.X_test)
+              # mean_abs_shap = np.abs(shap_values.values).mean(axis=0) #take only dominant
+              # shapValues = shap_values.values
           else:
+              #compute Shap values
+              explainer = shap.Explainer(model)
+              shap_values = explainer(self.X_test)
               mean_abs_shap = np.abs(shap_values.values[:,:,1]).mean(axis=0) #take only dominant
               shapValues = shap_values.values[:,:,1]
               
-          return shapValues, mean_abs_shap
+          return shap_values
     
     '''
     input: model name
@@ -225,8 +228,9 @@ class learning_data:
         #original data
         model = self.train_model()
         #probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test= self.test_model(model)
-        #shap_values, mean_abs_shap = self.find_features(model)
+       
         y_pred, y_prob, y_test = self.simple_test_model(model)
+        shap_values = self.find_features(model)
         
-        return y_pred, y_prob, y_test   
+        return y_pred, y_prob, y_test, shap_values 
         #return probabilities_test, accuracy_test,y_pred_test, classes,cm_test,precision_test,recall_test,f1_test # shap_values, mean_abs_shap

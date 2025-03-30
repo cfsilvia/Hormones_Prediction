@@ -6,7 +6,8 @@ import pandas as pd
 from matplotlib.lines import Line2D
 from collections import defaultdict
 import shap
-#matplotlib.use('TkAgg') 
+import matplotlib as mpl
+matplotlib.use('TkAgg') 
 #plt.ion() # Turn on the interactive mode
 
 
@@ -521,12 +522,163 @@ class plot_data:
           axs[i,j].set_title(("+".join(self.data[m]['features'])) + '\n' + m, fontsize = 7, color='red')
           axs[i, j].set_xlabel("abs(shap.values)", fontsize = 8) 
           #axs[i,j].yticks(fontsize=6)
-      plt.savefig(self.output_directory + self.title + '_important_features' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')        
+      plt.savefig(self.output_directory + self.title + '_important_features' +'.pdf', format='pdf',dpi=300, bbox_inches='tight')   
+      
+      
+    '''
+    plot shap values
+    '''
+    def plot_trad_shap(self):
+        fig, axs = plt.subplots(2 , 3,  figsize=(200, 100)) 
+        #plt.subplots_adjust(left=0.5, right=0.9, top=0.9, bottom=0.1, wspace=0.3, hspace=0.3) #good 60
+
+       # fig.subplots_adjust(hspace=0.5, wspace=0.3)  # Adjust space between subplots
+        for i in range(2):
+           for j in range(3):
+               axs[i,j].set_axis_off()
+
+
+        for m, inner_dict in self.data.items():
+         fig.suptitle(tuple(inner_dict['classes']), fontsize=10)
+         all_shap_values = inner_dict['shap_values']
+         # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
+         all_shap_values_1 = np.concatenate(all_shap_values, axis=0)
+         X = inner_dict['data_features']
+         feature_names = X.columns
+         
+         #only consider the 10 main features according to absolute value
+         mean_abs_shap = np.abs(all_shap_values_1).mean(axis=0)
+         top_indices = np.argsort(mean_abs_shap)[-10:][::-1]
+         X_top = X.iloc[:,top_indices]
+         shap_values_top =all_shap_values_1[:,top_indices]
+         
+         
+        # Plot 1: Traditional SHAP Summary (Beeswarm) Plot
+         #plt.figure(figsize=(12, 12)) 
+         plt.sca(axs[0,2])
+         axs[0,2].set_axis_on()
+         shap.summary_plot(shap_values_top, X_top , feature_names=X_top.columns.tolist(),plot_type='violin',show=False)
+         axs[0,2].set_title('Feature influence on prediction',fontsize=8)
+         axs[0,2].set_xlabel("SHAP value \n (impact on model output)")
+         axs[0,2].xaxis.label.set_size(6)
+         axs[0,2].yaxis.label.set_size(6)
+         for tick in axs[0,2].get_yticklabels():
+             tick.set_fontsize(6)
+         for tick in axs[0,2].get_xticklabels():
+             tick.set_fontsize(6)
+         axs[0,2].set_xlim(-2.5,2.5)
+         
+         
+         #plt.figure(figsize=(12, 12)) 
+         plt.sca(axs[0,1])
+         axs[0,1].set_axis_on()
+         shap.summary_plot(shap_values_top, X_top , feature_names=X_top.columns.tolist(),show=False)
+         axs[0,1].set_title('Feature influence on prediction',fontsize=8)
+         axs[0,1].set_xlabel("SHAP value \n (impact on model output)")
+         axs[0,1].xaxis.label.set_size(6)
+         axs[0,1].yaxis.label.set_size(6)
+         for tick in axs[0,1].get_yticklabels():
+             tick.set_fontsize(6)
+         for tick in axs[0,1].get_xticklabels():
+             tick.set_fontsize(6)
+         axs[0,1].set_xlim(-2,2)
+         
+                  
+         # Plot 2: SHAP Summary Bar Plot
+         #plt.figure(figsize=(12, 12)) 
+         plt.sca(axs[0,0])
+         axs[0,0].set_axis_on()
+         shap.summary_plot(shap_values_top, X_top , feature_names=X_top.columns.tolist(), plot_type="bar", show =False)
+         axs[0,0].set_title('Ten important features',fontsize=8)
+         axs[0,0].set_xlabel("mean(|SHAP value|) \n (average impact on model output)")
+         axs[0,0].xaxis.label.set_size(6)
+         axs[0,0].yaxis.label.set_size(6)
+         for tick in axs[0,0].get_yticklabels():
+             tick.set_fontsize(6)
+         for tick in axs[0,0].get_xticklabels():
+             tick.set_fontsize(6)
+         
+         class_ = inner_dict['classes']
+         plt.sca(axs[1,0]) 
+         axs[1,0].set_axis_on()
+         fscore_actual = (inner_dict['fscore'])[0]
+         pval = np.mean(inner_dict['shuffle_fscore_class1'] >= fscore_actual)
+         plt.hist(inner_dict['shuffle_fscore_class1'], bins=6, alpha=0.7, color='blue', edgecolor='black')
+         plt.axvline(fscore_actual, color='red',linestyle='--', label= f"Actual F-score = {fscore_actual}")
+         plt.text(fscore_actual + 0.1, plt.ylim()[1]*0.8, f"pvalue = {pval:.3f}", color='red',fontsize = 6)
+         axs[1,0].set_title('random permutation',fontsize=8)
+         axs[1,0].set_xlim(0,1)
+         axs[1,0].set_ylabel("Frequency")
+         axs[1,0].set_xlabel('shuffle_fscore_' + class_[0])
+         axs[1,0].xaxis.label.set_size(6)
+         axs[1,0].yaxis.label.set_size(6)
+         for tick in axs[1,0].get_yticklabels():
+             tick.set_fontsize(6)
+         for tick in axs[1,0].get_xticklabels():
+             tick.set_fontsize(6)
+         
+         
+         plt.sca(axs[1,1]) 
+         axs[1,1].set_axis_on()
+         fscore_actual = (inner_dict['fscore'])[1]
+         pval = np.mean(inner_dict['shuffle_fscore_class2'] >= fscore_actual)
+         plt.hist(inner_dict['shuffle_fscore_class2'], bins=6, alpha=0.7, color='blue', edgecolor='black')
+         plt.axvline(fscore_actual, color='red',linestyle='--', label= f"Actual F-score = {fscore_actual}")
+         plt.text(fscore_actual + 0.1, plt.ylim()[1]*0.8, f"pvalue = {pval:.3f}", color='red',fontsize = 6)
+         axs[1,1].set_title('random permutation',fontsize = 8)
+         axs[1,1].set_xlim(0,1)
+         axs[1,1].set_ylabel("Frequency")
+         axs[1,1].set_xlabel('shuffle_fscore_' + class_[1])
+         axs[1,1].xaxis.label.set_size(6)
+         axs[1,1].yaxis.label.set_size(6)
+         for tick in axs[1,1].get_yticklabels():
+             tick.set_fontsize(6)
+         for tick in axs[1,1].get_xticklabels():
+             tick.set_fontsize(6)
+             
+        #add confusion matrix
+        plt.sca(axs[1,2]) 
+        axs[1,2].set_axis_on()
+        cm = inner_dict['confusion_matrix']
+        class_names = inner_dict['classes']
+        sum_cm = np.sum(inner_dict['confusion_matrix'], axis=1)
+        #Normalize by the total number of instances per class
+        sns.heatmap(cm/sum_cm, annot=True, fmt='.2%', cmap='Blues', cbar=False,xticklabels=class_names, yticklabels=class_names,annot_kws={"size": 8},ax =axs[i,j])
+        axs[1,2].set_title(('confusion matrix') , fontsize = 8)
+        axs[1,2].set_xlabel('Predicted Labels',fontsize = 6)
+        axs[1,2].set_ylabel('True Labels', fontsize = 6)
+        for tick in axs[1,2].get_yticklabels():
+             tick.set_fontsize(6)
+        for tick in axs[1,2].get_xticklabels():
+             tick.set_fontsize(6)
+        
+        plt.tight_layout()
+        
+        # # Get the figure manager
+        # manager = plt.get_current_fig_manager()
+        # manager.window.state('zoomed')  
+        
+        # plt.ion()
+        # plt.show()
+        # plt.pause(0.1)
+        # plt.gca()
+        plt.savefig(self.output_directory + self.title + '_important_features' +'.pdf', format='pdf',dpi=300,bbox_inches='tight')  
+       # plt.close() 
+        
+        
+        
+        
+        a=1
+      
+      
+      
+      
+           
            
     def __call__(self,select_column_prob):
       
         total_data, data_dict = self.create_table()
-        total_data_before, data_dict_before = self.create_table_before()
+        #total_data_before, data_dict_before = self.create_table_before()
         
         #filter data according to confusion matrix
         # total_data_filter_confusion = self.filter_confusion(total_data, class1,class2)
@@ -537,6 +689,13 @@ class plot_data:
         #list hormones
         hormones_list = list(set(data_dict['hormones']))
         models_list = list(set(data_dict['models']))
+        
+        
+        #do this for significant F score
+        fscore_list = self.data[models_list[0]]['fscore']
+        if (fscore_list[0] >= 0.6) and (fscore_list[1] >= 0.6):
+            self.plot_trad_shap()
+        
        # self.PlotFeaturesShap(hormones_list, models_list)
         
         # if not total_data.empty:
@@ -550,5 +709,5 @@ class plot_data:
       #  self.plot_boot_histograms(hormones,models)
 
 
-        return total_data, total_data_before
+        return total_data
      

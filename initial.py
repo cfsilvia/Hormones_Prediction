@@ -66,7 +66,7 @@ def main_menu(choice,data):
                         filename = output_directory + title_file + '.pkl'
                         Auxiliary_functions.save_part_of_dict(filename, model, model_dict)
 
-                        a=1
+                a=1
                        
            # filename = output_directory + title_file + '.pkl'        
             # # Save the dictionary
@@ -124,16 +124,16 @@ def main_menu(choice,data):
                    data = pickle.load(f)
                 
                 new_obj = plot_data(data, title_file, ouput_directory,sex)
-                total_data, total_data_before = new_obj(select_column_prob)
+                total_data = new_obj(select_column_prob)
                 total_data_final = pd.concat([total_data_final, total_data], axis=0)
-                total_data_before_final = pd.concat([total_data_before_final, total_data_before], axis=0)
+               # total_data_before_final = pd.concat([total_data_before_final, total_data_before], axis=0)
             mode = 'a' if os.path.exists(ouput_directory +  "_" + type + '.xlsx') else 'w'
             with pd.ExcelWriter(ouput_directory +  "_" + type + '.xlsx',mode=mode) as writer:
                 total_data_final.to_excel(writer, sheet_name=sex, index=False)
-            #save before features selection    
-            mode = 'a' if os.path.exists(ouput_directory +  "_" + "before_" + type + '.xlsx') else 'w'
-            with pd.ExcelWriter(ouput_directory +  "_" + "before_" + type + '.xlsx',mode=mode) as writer:
-                total_data_before_final.to_excel(writer, sheet_name=sex, index=False)
+            # #save before features selection    
+            # mode = 'a' if os.path.exists(ouput_directory +  "_" + "before_" + type + '.xlsx') else 'w'
+            # with pd.ExcelWriter(ouput_directory +  "_" + "before_" + type + '.xlsx',mode=mode) as writer:
+            #     total_data_before_final.to_excel(writer, sheet_name=sex, index=False)
               
 
         elif choice == "5":
@@ -208,7 +208,7 @@ def main_menu(choice,data):
 
 
 if __name__ == "__main__":
-    with open("Z:/cfsilvia/Data/settings_windows.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
+    with open("F:/SilviaData/rutiFrishman/settings_windows.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    
     main_menu(choice,data)
