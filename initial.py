@@ -124,8 +124,16 @@ def main_menu(choice,data):
                    data = pickle.load(f)
                 
                 new_obj = plot_data(data, title_file, ouput_directory,sex)
-                total_data = new_obj(select_column_prob)
+                total_data, df_all_shape_values,   df_all_abs_shape_values = new_obj(select_column_prob)
                 total_data_final = pd.concat([total_data_final, total_data], axis=0)
+                if not df_all_shape_values.empty:
+                    mode = 'a' if os.path.exists(ouput_directory +  "_" + type + '_shap_' + '_'.join(p) +  '.xlsx') else 'w'
+                    with pd.ExcelWriter(ouput_directory +  "_" + type + '_shap_' + '_'.join(p) +  '.xlsx',mode=mode) as writer:
+                        df_all_shape_values.to_excel(writer, sheet_name='shap_values', index=False)
+                        df_all_abs_shape_values.to_excel(writer, sheet_name='abs_shap_values', index=False)
+                    
+                
+                
                # total_data_before_final = pd.concat([total_data_before_final, total_data_before], axis=0)
             mode = 'a' if os.path.exists(ouput_directory +  "_" + type + '.xlsx') else 'w'
             with pd.ExcelWriter(ouput_directory +  "_" + type + '.xlsx',mode=mode) as writer:
@@ -134,8 +142,10 @@ def main_menu(choice,data):
             # mode = 'a' if os.path.exists(ouput_directory +  "_" + "before_" + type + '.xlsx') else 'w'
             # with pd.ExcelWriter(ouput_directory +  "_" + "before_" + type + '.xlsx',mode=mode) as writer:
             #     total_data_before_final.to_excel(writer, sheet_name=sex, index=False)
+             
               
-
+               # df_all_features_values.to_excel(writer, sheet_name='features_values', index=False) 
+      
         elif choice == "5":
                  type = data['5']['type']
                  sex = data['5']['sex']

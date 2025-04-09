@@ -7,6 +7,11 @@ from matplotlib.lines import Line2D
 from collections import defaultdict
 import shap
 import matplotlib as mpl
+import matplotlib.collections as mcoll
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
+from sklearn.preprocessing import MinMaxScaler
+from matplotlib.colors import LinearSegmentedColormap
 matplotlib.use('TkAgg') 
 #plt.ion() # Turn on the interactive mode
 
@@ -567,6 +572,13 @@ class plot_data:
          for tick in axs[0,2].get_xticklabels():
              tick.set_fontsize(6)
          axs[0,2].set_xlim(-2.5,2.5)
+         subdivisions = [-2.5,0,2.5]
+         axs[0,2].set_xticks(subdivisions)
+         # Remove all PathCollection (scatter plots) from axes
+         for collection in list(axs[0,2].collections):
+             if isinstance(collection, mcoll.PathCollection):
+                 collection.remove()
+         
          
          
          #plt.figure(figsize=(12, 12)) 
@@ -581,7 +593,9 @@ class plot_data:
              tick.set_fontsize(6)
          for tick in axs[0,1].get_xticklabels():
              tick.set_fontsize(6)
-         axs[0,1].set_xlim(-2,2)
+         axs[0,1].set_xlim(-2.5,2.5)
+         subdivisions = [-2.5,0,2.5]
+         axs[0,1].set_xticks(subdivisions)
          
                   
          # Plot 2: SHAP Summary Bar Plot
@@ -593,10 +607,15 @@ class plot_data:
          axs[0,0].set_xlabel("mean(|SHAP value|) \n (average impact on model output)")
          axs[0,0].xaxis.label.set_size(6)
          axs[0,0].yaxis.label.set_size(6)
+         axs[0,0].set_xlim(0,1.5)
+         subdivisions = [0,0.5,1,1.5]  # every 0.5 units
+         axs[0,0].set_xticks(subdivisions)
          for tick in axs[0,0].get_yticklabels():
              tick.set_fontsize(6)
          for tick in axs[0,0].get_xticklabels():
              tick.set_fontsize(6)
+         
+         
          
          class_ = inner_dict['classes']
          plt.sca(axs[1,0]) 
@@ -671,43 +690,344 @@ class plot_data:
         a=1
       
       
-      
-      
+    ##############################################
+    '''
+    input: shap values
+    output: shap values for each sex, including mean of absolute value including standard error
+    '''
+    def getShap(self, sex):
+        sex_indexes = []
+        for m, inner_dict in self.data.items():
+          #get shap values
+          all_shap_values = inner_dict['shap_values']
+         # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
+          all_shap_values_1 = np.concatenate(all_shap_values, axis=0)
+          #get maximo abs value
+          max_abs_value = np.max(np.abs(all_shap_values_1))
+          
+          #get features
+          X = inner_dict['data_features']
+          feature_names = X.columns
+          if (sex == 'male') or (sex == 'female'):
+             sex_shap = inner_dict['values_sex_test']
+             sex_values = [s.iloc[0] for s in sex_shap]
+             sex_indexes = [i for i,sexs in enumerate(sex_values) if sexs == sex]
+             shap_sex = all_shap_values_1[sex_indexes,:]
+             original_data = X.iloc[sex_indexes,:]
+          else:
+             shap_sex = all_shap_values_1
+             original_data = X
+         #only consider the 10 main features according to absolute value
+          #calculate mean
+          mean_abs_shap = np.abs(shap_sex).mean(axis=0)
+          #calculate standard error
+          abs_data = np.abs(shap_sex)
+          stderror_abs_shap = np.std(abs_data, axis = 0, ddof = 1)/np.sqrt(abs_data.shape[0])
+          
+          #order in a given order
+          #top_indices = np.argsort(mean_abs_shap)[-10:][::-1]
+          top_indices = np.argsort(mean_abs_shap)[::-1]
+          X_top = X.iloc[:,top_indices]
+          shap_values_top =mean_abs_shap[top_indices]
+          shap_values_error = stderror_abs_shap[top_indices]
+          categories = X_top.columns.tolist()
+          
+          classes = inner_dict['classes']
+          
+          
+          return categories, shap_values_top, shap_values_error,classes,max_abs_value,shap_sex,original_data, sex_indexes
+          
+          
+          
+         
+          
+    '''
+        Input: data to plot
+        Output bar plot
+        '''
+    
+    def plotBarPlot(self,categories,shap_values_top,shap_values_error,ax,sex,maximo):
+           fig, ax_alone =plt.subplots(figsize=(8, 5))
+           for axs in [ax, ax_alone]: 
+            axs.barh(y=categories, width=shap_values_top, xerr=shap_values_error, capsize=3, color='royalblue', edgecolor='none')
+            axs.invert_yaxis() 
+            axs.set_title(sex)
+            axs.spines['top'].set_visible(False)
+            axs.spines['right'].set_visible(False)
+            axs.spines['left'].set_color('gray')
+            axs.set_xlabel("mean(|SHAP value|")
+            ax.set_yticklabels(categories,fontsize = 6)
+            #remove y axis ticks
+            
+            axs.set_xlim(0,1.6)
+            
+            
+            if axs == ax_alone:
+               plt.savefig(self.output_directory + self.title + '_important_features_1' +'.pdf', format='pdf',dpi=300,bbox_inches='tight')  
+               plt.close()
+           #ax.gca().invert_yaxis()
+            
            
+    def arrange(self,all_categories,all_shap_abs,all_shap_abs_err):  
+         
+        #  indices_males = [(all_categories[1]).index(item) for item in (all_categories[0])[0:9]]
+        #  indices_females = [(all_categories[2]).index(item) for item in (all_categories[0])[0:9]]
+         
+         indices_males = [(all_categories[1]).index(item) for item in (all_categories[0])]
+         indices_females = [(all_categories[2]).index(item) for item in (all_categories[0])]
+         all_shap_abs_males = [(all_shap_abs[1])[i] for i in indices_males ]
+         all_shap_abs_females = [(all_shap_abs[2])[i] for i in indices_females ]
+         all_shap_abs_err_males = [(all_shap_abs_err[1])[i] for i in indices_males ]
+         all_shap_abs_err_females = [(all_shap_abs_err[2])[i] for i in indices_females ]
+         
+         return all_shap_abs_males,all_shap_abs_females, all_shap_abs_err_males, all_shap_abs_err_females
+    '''
+    input:data
+    '''  
+    def twobarplot(self,labels,abs_males,abs_females, err_males, err_females,ax ):
+      y_pos = np.arange(len(labels))*2
+      bar_width = 0.7
+      ax.barh(y_pos - bar_width/2, abs_males, xerr=err_males, height=bar_width,
+        label='Male', color='skyblue', capsize=1,edgecolor='none',error_kw=dict(elinewidth=1, capsize=1, capthick=1))
+      ax.barh(y_pos + bar_width/2, abs_females, xerr=err_females, height=bar_width,
+        label='Female', color='lightpink', capsize=1,edgecolor='none',error_kw=dict(elinewidth=1, capsize=1, capthick=1))
+      
+      ax.invert_yaxis() 
+      ax.spines['top'].set_visible(False)
+      ax.spines['right'].set_visible(False)
+      ax.spines['left'].set_color('gray')
+      ax.set_yticks(y_pos)
+      ax.set_yticklabels(labels,fontsize = 6)
+      ax.set_xlabel("mean(|SHAP value|")
+      
+
+      ax.legend()
+      
+    '''
+      input:shap values
+      output: shap values were ordered
+      '''
+    def arrange_values(self,all_shap_values,original_features,order_categories,all_original_features):
+        #find index of the order category
+        indices= [(original_features.columns).get_loc(item) for item in order_categories]
+        all_shap_values_ordered = all_shap_values[:,indices]
+        all_original_features_ordered = all_original_features.iloc[:,indices]
+        return all_shap_values_ordered,  all_original_features_ordered
+    
+    '''
+    output: shap plots
+    '''
+    def plotDotPlot(self,all_shap_values_ordered,all_original_features_ordered,ordered_categories, sex,ax,indices_sex): 
+           fig, ax_alone =plt.subplots(figsize=(8, 5))
+           # Create a smooth gradient from blue → violet → red
+           blue_violet_red = LinearSegmentedColormap.from_list(
+                'blue_violet_red',
+              ['blue', 'violet', 'red']
+              )
+           for axs in [ax, ax_alone]: 
+              n_total_samples, n_features = all_shap_values_ordered.shape
+              for i in range(n_features):
+                  vals = all_shap_values_ordered[:, i]
+                  # Use feature value to color it use allfeatures both male and emale
+                  raw_color = all_original_features_ordered.iloc[:, i].values.reshape(-1,1)
+                  # Normalize to 0–1
+                  color = MinMaxScaler().fit_transform(raw_color).flatten()
+                  
+                  if (sex=='male') or (sex == 'female'):
+                    color = color[indices_sex] #choose the given colors
+                  
+                  # Jitter y-axis
+                  
+                  y = np.random.normal(i, 0.1, size=vals.shape[0])
+                  scatter = axs.scatter(vals, y, c=color, cmap= blue_violet_red , s=40, alpha=1, edgecolor='k', linewidth=0.2)
+                  axs.hlines(i, xmin=-2.5, xmax=2.5,color='lightgray', linestyle='--', linewidth=0.5, alpha=0.6, zorder=0)
+              # Label formatting
+              axs.set_yticks(range(n_features))
+              axs.set_yticklabels(ordered_categories,fontsize =8)
+              axs.axvline(0, linestyle='-', color='gray', linewidth=1)
+              axs.set_xlabel('SHAP value')
+              axs.set_title(sex)
+              axs.invert_yaxis()  # To match SHAP default
+              axs.set_xlim(-2.5,2.5)
+              
+              cbar = fig.colorbar(scatter, ax=axs,aspect=40, pad=0.01)
+              cbar.set_label('Feature value')
+              cbar.ax.tick_params(size=0, labelsize=0)  # Hides ticks and numbers
+              cbar.ax.text(0.5, -0.05, 'Low', ha='center', va='top', transform=cbar.ax.transAxes)
+              cbar.ax.text(0.5, 1.05, 'High', ha='center', va='bottom', transform=cbar.ax.transAxes)
+
+              
+              if axs == ax_alone:
+               plt.savefig(self.output_directory + self.title + '_important_features_1' +'.pdf', format='pdf',dpi=300,bbox_inches='tight')  
+               plt.close()
+               
+      
+    '''
+    output: shap plots- by marking the sex of species
+    '''
+    def plotDot_with_Sex(self,all_shap_values_ordered,all_original_features_ordered,ordered_categories, sex,ax,indices_sex): 
+      
+           fig, ax_alone =plt.subplots(figsize=(8, 5))
+           # Create a smooth gradient from blue → violet → red
+           blue_violet_red = LinearSegmentedColormap.from_list(
+                'blue_violet_red',
+              ['blue', 'violet', 'red']
+              )
+           for axs in [ax, ax_alone]: 
+              n_total_samples, n_features = all_shap_values_ordered.shape
+              for i in range(n_features):
+                vals = all_shap_values_ordered[:, i]
+                  # Use feature value to color it use allfeatures both male and emale
+                raw_color = all_original_features_ordered.iloc[:, i].values.reshape(-1,1)
+                  # Normalize to 0–1
+                color = MinMaxScaler().fit_transform(raw_color).flatten()
+                  
+                
+                  #separate females and males
+                  #males
+                vals_s = vals[indices_sex[1]]
+                y_s = np.random.normal(i, 0.1, size=vals_s.shape[0])
+                color_s = color[indices_sex[1]] #choose the given colors
+                  # Jitter y-axis
+                scatter = axs.scatter(vals_s, y_s, c=color_s, cmap= blue_violet_red , s=40, alpha=1, edgecolor='k', linewidth=0.2,marker = 'o')
+                  
+                  #females
+                vals_f = vals[indices_sex[2]]
+                y_f = np.random.normal(i, 0.1, size=vals_f.shape[0])
+                color_f = color[indices_sex[2]] #choose the given colors
+                  # Jitter y-axis
+                scatter = axs.scatter(vals_f, y_f, c=color_f, cmap= blue_violet_red , s=40, alpha=1, edgecolor='k', linewidth=0.2, marker = 's')
+ 
+                axs.hlines(i, xmin=-2.5, xmax=2.5,color='lightgray', linestyle='--', linewidth=0.5, alpha=0.6, zorder=0)
+              # Label formatting
+              axs.set_yticks(range(n_features))
+              axs.set_yticklabels(ordered_categories,fontsize =8)
+              axs.axvline(0, linestyle='-', color='gray', linewidth=1)
+              axs.set_xlabel('SHAP value')
+              axs.set_title("all")
+              axs.invert_yaxis()  # To match SHAP default
+              axs.set_xlim(-2.5,2.5)
+              
+              cbar = fig.colorbar(scatter, ax=axs,aspect=40, pad=0.01)
+              cbar.set_label('Feature value')
+              cbar.ax.tick_params(size=0, labelsize=0)  # Hides ticks and numbers
+              cbar.ax.text(0.5, -0.05, 'Low', ha='center', va='top', transform=cbar.ax.transAxes)
+              cbar.ax.text(0.5, 1.05, 'High', ha='center', va='bottom', transform=cbar.ax.transAxes)
+              
+              # Create custom legend handles
+              legend_elements = [
+                  Line2D([0], [0], marker='o', color='w', label='Male',
+                        markerfacecolor='black', markersize=10),
+                  Line2D([0], [0], marker='s', color='w', label='Female',
+                        markerfacecolor='black', markersize=10)
+              ]
+
+              # Add the legend with the custom handles
+              axs.legend(handles=legend_elements, loc='lower right')
+
+              
+              if axs == ax_alone:
+               plt.savefig(self.output_directory + self.title + '_important_features_1' +'.pdf', format='pdf',dpi=300,bbox_inches='tight')  
+               plt.close()
+    
            
     def __call__(self,select_column_prob):
-      
-        total_data, data_dict = self.create_table()
-        #total_data_before, data_dict_before = self.create_table_before()
+        all_categories = []
+        all_shap_abs = []
+        all_shap_abs_err = []
+        all_shap_values = []
+        all_original_features = []
+        all_sex_indices = []
+        df_all_shape_values = pd.DataFrame()  
+        df_all_abs_shape_values = pd.DataFrame() 
         
-        #filter data according to confusion matrix
-        # total_data_filter_confusion = self.filter_confusion(total_data, class1,class2)
-        # total_data_filter_all = self.filter_precision(total_data_filter_confusion, class1,class2)
-        # #create dictionary for each hormone with the correspond model data
-        # dict_hormones_models = self.create_dict(total_data_filter_all)
-        # #plot relevant data
+        total_data, data_dict = self.create_table()
+       
         #list hormones
         hormones_list = list(set(data_dict['hormones']))
         models_list = list(set(data_dict['models']))
-        
+       
         
         #do this for significant F score
         fscore_list = self.data[models_list[0]]['fscore']
+        ####################################################### bar plot graph
+        fig , axs = plt.subplots(2, 2, figsize=(10, 8))
+        for i in range(4):
+               axs[i // 2, i % 2].set_axis_off()
         if (fscore_list[0] >= 0.6) and (fscore_list[1] >= 0.6):
-            self.plot_trad_shap()
-        
-       # self.PlotFeaturesShap(hormones_list, models_list)
-        
-        # if not total_data.empty:
-        #   self.plot_confusion_matrix(hormones_list,models_list)
-        #   self.plot_precision(hormones_list,models_list)
-        #   self.plot_recall(hormones_list,models_list)
-        #   self.plot_f1score(hormones_list,models_list)
-        #   self.plot_accuracy(hormones_list,models_list)
-         # self.plot_important_features(hormones_list,models_list)
-       #   self.plot_prob(hormones_list,models_list)
-      #  self.plot_boot_histograms(hormones,models)
+             for i,sex in enumerate(['all','male','female']): 
+                axs[i // 2,i % 2].set_axis_on() 
+                categories, shap_values_top, shap_values_error,classes,maximo,shap_sex_allvalues,original_features, sex_indexes = self.getShap(sex)
+                self.plotBarPlot(categories, shap_values_top, shap_values_error,axs[i // 2,i % 2],sex,np.ceil(maximo))
+                all_categories.append(categories)
+                all_shap_abs.append(shap_values_top)
+                all_shap_abs_err.append(shap_values_error)
+                all_shap_values.append(shap_sex_allvalues)
+                all_original_features.append(original_features)
+                all_sex_indices.append(sex_indexes)
+              
+             all_shap_abs_males,all_shap_abs_females, all_shap_abs_err_males, all_shap_abs_err_females = self.arrange(all_categories,all_shap_abs,all_shap_abs_err) 
+             axs[1,1].set_axis_on() 
+             #self.twobarplot((all_categories[0])[0:9],all_shap_abs_males,all_shap_abs_females, all_shap_abs_err_males, all_shap_abs_err_females,axs[1,1] )  
+             self.twobarplot((all_categories[0]),all_shap_abs_males,all_shap_abs_females, all_shap_abs_err_males, all_shap_abs_err_females,axs[1,1] )  
+             fig.suptitle(tuple(classes), fontsize=12)
+             
+             plt.tight_layout()
+             plt.savefig(self.output_directory + self.title + '_important_features_full' +'.pdf', format='pdf',dpi=300,bbox_inches='tight')
+             ################################################
+              ####################################################### dots plot graph
+        fig , axs = plt.subplots(2, 2, figsize=(16, 12))
+        for i in range(4):
+                    axs[i // 2, i % 2].set_axis_off()
+        if (fscore_list[0] >= 0.6) and (fscore_list[1] >= 0.6):
+                  for i,sex in enumerate(['all','male','female']): 
+                      axs[i // 2,i % 2].set_axis_on() 
+                      all_shap_values_ordered , all_original_features_ordered= self.arrange_values(all_shap_values[i],original_features,(all_categories[0]),all_original_features[0]) #take all the features
+                      #for all
+                      if sex == 'all':
+                          all_shap_values_ordered_for_all = all_shap_values_ordered
+                          all_original_features_ordered_for_all = all_original_features_ordered
+                          
+                      self.plotDotPlot(all_shap_values_ordered,all_original_features_ordered,(all_categories[0]), sex,axs[i // 2,i % 2],all_sex_indices[i])
+                  axs[1,1].set_axis_on() 
+                  all_shap_values_ordered , all_original_features_ordered= self.arrange_values(all_shap_values[0],original_features,(all_categories[0]),all_original_features[0]) #take all the features    
+                  self.plotDot_with_Sex(all_shap_values_ordered,all_original_features_ordered,(all_categories[0]), sex,axs[1,1],all_sex_indices)  
+                 
+                    
+                  fig.suptitle(tuple(classes), fontsize=12)
+                  
+                  plt.tight_layout()
+                  plt.savefig(self.output_directory + self.title + '_shap_values_all' +'.pdf', format='pdf',dpi=300,bbox_inches='tight')
+            #  ################################################
+        # save shap values in an excel file
+       # self.saveShap()   
+             
+                  df_all_shape_values = pd.DataFrame(all_shap_values_ordered, columns = all_original_features_ordered.columns.to_list())
+                  df_all_features_values =  pd.DataFrame(all_original_features_ordered)
+                  abs_arrays = [np.abs(arr) for arr in all_shap_values_ordered]
+                  df_all_abs_shape_values = pd.DataFrame(abs_arrays, columns = all_original_features_ordered.columns.to_list())
+                  
+                  df_all_shape_values['sex'] = np.nan
+                  df_all_features_values['sex'] = np.nan
+                  df_all_abs_shape_values['sex'] = np.nan
+                  
+                  df_all_shape_values.loc[all_sex_indices[1],'sex'] = 'male'
+                  df_all_shape_values.loc[all_sex_indices[2],'sex'] = 'female'
+                  
+                  # df_all_features_values.loc[all_sex_indices[1],'sex'] = 'male'
+                  # df_all_features_values.loc[all_sex_indices[2],'sex'] = 'female'
+                  
+                  df_all_abs_shape_values.loc[all_sex_indices[1],'sex'] = 'male'
+                  df_all_abs_shape_values.loc[all_sex_indices[2],'sex'] = 'female'
+                  
+             
+             #plt.show() 
+             
+                
+                
+   
+            
+       
 
-
-        return total_data
+        return total_data, df_all_shape_values,  df_all_abs_shape_values
      

@@ -41,7 +41,8 @@ class treat_data:
         if choice == "2":
             #add a columns to distinguish each arena experiment with numbers, beggining from 1
             selected_data = selected_data.copy()
-            selected_data['groups'] = pd.factorize(selected_data['Experiment'])[0] + 1
+            #selected_data['groups'] = pd.factorize(selected_data['Experiment'])[0] + 1
+            selected_data['groups'] = selected_data['sex']
             selection = hormones[:] #creates a shallow copy
             selection.append('status')
             selection.append('groups')
@@ -267,7 +268,7 @@ class treat_data:
          threshold_ratio = 0.6
          #create dictionary of the results
          results_dict = {}
-         predictions,predicted_probs,true_labels, all_shap_values  = [], [], [], []
+         predictions,predicted_probs,true_labels, all_shap_values, all_sex_values  = [], [], [], [], []
          # Set up Leave-One-Out Cross-Validation (LOOCV)
          loo = LeaveOneOut()
          
@@ -279,6 +280,7 @@ class treat_data:
          for train_idx, test_idx in loo.split(X, y):
             X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
             y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+            sex_test = (selected_data.iloc[test_idx])['groups']
             #normalize the train data-use normalization for test data
             if normalization:
                X_train_scaled, X_test_scaled = self.normalization(X_train,X_test)
@@ -302,7 +304,7 @@ class treat_data:
             predicted_probs.append(y_prob)
             true_labels.append(y_test)
             all_shap_values.append(shap_values)
-            
+            all_sex_values.append(sex_test)
              #   
              
 
@@ -332,8 +334,8 @@ class treat_data:
 
          accuracy, precision,recall, fscore,cm, balanced_acc,roc_auc = learning_data.metrics(predictions,predicted_probs,true_labels,model_name)     
          #Found the stable features  
-         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','roc_auc','shap_values','data_features']
-         values = [classes_real, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, fscore,roc_auc, all_shap_values,X]                 
+         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','roc_auc','shap_values','data_features','values_sex_test']
+         values = [classes_real, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, fscore,roc_auc, all_shap_values,X,all_sex_values]                 
          results_dict = dict(zip(keys, values))   
          #get unique features
         #  unique_features, frequency_list, dict_index_per_feature = treat_data.find_unique_features(results_dict['features'])
@@ -366,7 +368,7 @@ class treat_data:
      output_data: Fscore for each shuffle
      '''
     def  add_shuffling(self,selected_data,normalization, model,n_repeats,choice,findFeatureMethod, hormones):
-           n_iterations = 1000
+           n_iterations = 10
            permutations = set()
            # Create a generator with a fixed seed assure different permutation each time
            rng = np.random.default_rng(42)
@@ -408,6 +410,8 @@ class treat_data:
          else:
              results_dict['shuffle_fscore_class1'] = []
              results_dict['shuffle_fscore_class2'] = []
+          
+         
          
          return results_dict   
          # if it is required randomize the data
