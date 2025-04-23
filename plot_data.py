@@ -13,6 +13,7 @@ from matplotlib.cm import ScalarMappable
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib.colors import LinearSegmentedColormap
 matplotlib.use('TkAgg') 
+import plot_violin_functions
 #plt.ion() # Turn on the interactive mode
 
 
@@ -930,6 +931,56 @@ class plot_data:
                plt.savefig(self.output_directory + self.title + '_important_features_1' +'.pdf', format='pdf',dpi=300,bbox_inches='tight')  
                plt.close()
     
+    '''
+    input: original data dictionary
+    output: data frame of shape values and abs shap values which include all data information
+    '''
+    def saveShapValues(self):
+        total_data_shap = pd.DataFrame()
+        for m, inner_dict in self.data.items(): #Note:prepare for one model
+          
+          mice_information = inner_dict['mice_information']
+          mice_information= pd.concat(mice_information, ignore_index = True)
+          
+          classes = inner_dict['classes']
+          
+          features = (inner_dict['features']).tolist()
+          
+          shap_values = inner_dict['shap_values']
+          shap_values = np.concatenate(shap_values, axis=0)
+          shap_values = pd.DataFrame(shap_values)
+          shap_values.columns = features
+        
+          #get abs value and also the order of the features
+          shap_abs_value = np.abs(shap_values)
+          top_indices = np.argsort(np.abs(shap_values).mean(axis=0))[::-1]
+          
+          # order columns of shap values first one with higher feature importance
+          shap_values =shap_values.iloc[:,top_indices]
+          
+          
+          labels_pred = inner_dict['labels_pred']
+          #labels_pred = pd.DataFrame(labels_pred)
+          true_labels = inner_dict['true_labels']
+          true_labels = [(true_labels[i]).iloc[0].item() for i in range(len(true_labels))]
+          
+          labels_pred_s = [classes[0] if x.item() == 0 else classes[1] for x in labels_pred]
+          true_labels_s = [classes[0] if x == 0 else classes[1] for x in true_labels]
+          
+          total_data_shap = pd.concat([mice_information,shap_values], axis=1)
+          
+          
+          total_data_shap['labels_pred'] = labels_pred_s
+          total_data_shap['true_labels'] = true_labels_s
+          
+          
+          
+          return total_data_shap
+          
+          
+           
+    
+    
            
     def __call__(self,select_column_prob):
         all_categories = []
@@ -940,6 +991,8 @@ class plot_data:
         all_sex_indices = []
         df_all_shape_values = pd.DataFrame()  
         df_all_abs_shape_values = pd.DataFrame() 
+        
+        
         
         total_data, data_dict = self.create_table()
        
@@ -999,35 +1052,16 @@ class plot_data:
                   plt.tight_layout()
                   plt.savefig(self.output_directory + self.title + '_shap_values_all' +'.pdf', format='pdf',dpi=300,bbox_inches='tight')
             #  ################################################
-        # save shap values in an excel file
-       # self.saveShap()   
-             
-                  df_all_shape_values = pd.DataFrame(all_shap_values_ordered, columns = all_original_features_ordered.columns.to_list())
-                  df_all_features_values =  pd.DataFrame(all_original_features_ordered)
-                  abs_arrays = [np.abs(arr) for arr in all_shap_values_ordered]
-                  df_all_abs_shape_values = pd.DataFrame(abs_arrays, columns = all_original_features_ordered.columns.to_list())
-                  
-                  df_all_shape_values['sex'] = np.nan
-                  df_all_features_values['sex'] = np.nan
-                  df_all_abs_shape_values['sex'] = np.nan
-                  
-                  df_all_shape_values.loc[all_sex_indices[1],'sex'] = 'male'
-                  df_all_shape_values.loc[all_sex_indices[2],'sex'] = 'female'
-                  
-                  # df_all_features_values.loc[all_sex_indices[1],'sex'] = 'male'
-                  # df_all_features_values.loc[all_sex_indices[2],'sex'] = 'female'
-                  
-                  df_all_abs_shape_values.loc[all_sex_indices[1],'sex'] = 'male'
-                  df_all_abs_shape_values.loc[all_sex_indices[2],'sex'] = 'female'
-                  
-             
-             #plt.show() 
-             
+        if (fscore_list[0] >= 0.6) and (fscore_list[1] >= 0.6):
+               df_all_shape_values = self.saveShapValues()
+                #  ################################################
+        if (fscore_list[0] >= 0.6) and (fscore_list[1] >= 0.6):
+               plot_violin_functions.Main_Violin_plots(self.data[models_list[0]])
                 
                 
    
             
        
 
-        return total_data, df_all_shape_values,  df_all_abs_shape_values
+        return total_data , df_all_shape_values #,  df_all_abs_shape_values
      

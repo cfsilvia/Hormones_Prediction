@@ -53,7 +53,7 @@ class learning_data:
            model = GaussianNB()
       elif self.model_name == "xgboost":
            #model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
-           model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
+           model = xgb.XGBClassifier(objective="binary:logistic", use_label_encoder=False, eval_metric="logloss", random_state=42)
             
       model.fit(self.X_train, self.y_train)
       return model
@@ -120,7 +120,7 @@ class learning_data:
            model = GaussianNB()
       elif model_name == "xgboost":
            #model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
-           model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
+           model = xgb.XGBClassifier(objective="binary:logistic",use_label_encoder=False, eval_metric="logloss", random_state=42)
         
       return model
     

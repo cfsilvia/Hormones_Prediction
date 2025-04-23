@@ -46,14 +46,16 @@ class treat_data:
             selection = hormones[:] #creates a shallow copy
             selection.append('status')
             selection.append('groups')
+            information_data = selected_data.iloc[:,[0,1,2,3,4,5,6]]
             selected_data = selected_data.loc[:,selection]
+            
             
             
         elif choice == "3":
              selection = hormones[:]
              selection.append(architype)
              selected_data = selected_data.loc[:,selection]
-        return selected_data
+        return selected_data, information_data
    
     '''
       input :data
@@ -264,11 +266,11 @@ class treat_data:
     input: selected data
     output : after splitting and learning get dictionary 
     '''
-    def train_learning(self,selected_data,normalization, model_name=None,n_repeats = None,choice = None,findFeatureMethod = None, hormones = None):
+    def train_learning(self,selected_data,normalization, model_name=None,n_repeats = None,choice = None,findFeatureMethod = None, hormones = None,information_data = None):
          threshold_ratio = 0.6
          #create dictionary of the results
          results_dict = {}
-         predictions,predicted_probs,true_labels, all_shap_values, all_sex_values  = [], [], [], [], []
+         predictions,predicted_probs,true_labels, all_shap_values, all_sex_values, all_mice_information  = [], [], [], [], [], []
          # Set up Leave-One-Out Cross-Validation (LOOCV)
          loo = LeaveOneOut()
          
@@ -281,6 +283,8 @@ class treat_data:
             X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
             y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
             sex_test = (selected_data.iloc[test_idx])['groups']
+            if information_data is not None:
+               information_mice = information_data.iloc[test_idx]
             #normalize the train data-use normalization for test data
             if normalization:
                X_train_scaled, X_test_scaled = self.normalization(X_train,X_test)
@@ -305,6 +309,8 @@ class treat_data:
             true_labels.append(y_test)
             all_shap_values.append(shap_values)
             all_sex_values.append(sex_test)
+            if information_data is not None:
+               all_mice_information.append(information_mice)
              #   
              
 
@@ -334,8 +340,8 @@ class treat_data:
 
          accuracy, precision,recall, fscore,cm, balanced_acc,roc_auc = learning_data.metrics(predictions,predicted_probs,true_labels,model_name)     
          #Found the stable features  
-         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','roc_auc','shap_values','data_features','values_sex_test']
-         values = [classes_real, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, fscore,roc_auc, all_shap_values,X,all_sex_values]                 
+         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','roc_auc','shap_values','data_features','values_sex_test','mice_information']
+         values = [classes_real, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, fscore,roc_auc, all_shap_values,X,all_sex_values, all_mice_information]                 
          results_dict = dict(zip(keys, values))   
          #get unique features
         #  unique_features, frequency_list, dict_index_per_feature = treat_data.find_unique_features(results_dict['features'])
@@ -368,7 +374,7 @@ class treat_data:
      output_data: Fscore for each shuffle
      '''
     def  add_shuffling(self,selected_data,normalization, model,n_repeats,choice,findFeatureMethod, hormones):
-           n_iterations = 10
+           n_iterations = 1000
            permutations = set()
            # Create a generator with a fixed seed assure different permutation each time
            rng = np.random.default_rng(42)
@@ -396,11 +402,11 @@ class treat_data:
          self.data = treat_data.addRatios(self.data,hormones)
          #select data to work with
          if choice == "2":
-            selected_data = self.select_data(sex, choice, hormones)
+            selected_data, information_data = self.select_data(sex, choice, hormones)
          elif choice == "3":
-            selected_data = self.select_data(sex, choice, hormones,architype)
+            selected_data, information_data = self.select_data(sex, choice, hormones,architype)
             
-         results_dict = self.train_learning(selected_data, normalization, model,n_repeats,choice,findFeatureMethod, hormones)
+         results_dict = self.train_learning(selected_data, normalization, model,n_repeats,choice,findFeatureMethod, hormones, information_data)
          list_fscore = results_dict['fscore']
          #add shuffling 
          if (list_fscore[0] >= 0.6) and (list_fscore[1] >= 0.6):
