@@ -16,99 +16,33 @@ import os
 @profile
 def main_menu(choice,data):
      
+      
+            
         if choice == "1":
-            pareto_file = data['1']['pareto_file'] 
-            data_file = data['1']['data_file']
-            output_file =data['1']['output_file']
-            distance = data['1']['distance']
-            columns_hormones_to_extract = data['1']['columns_to_extract']
-            
-            
-            new_obj = manage_data(pareto_file, data_file, output_file, distance,columns_hormones_to_extract)
-           
-            new_obj()
-            
-        elif choice == "2":
-            type = data['2']['type'] 
-            output_file =data['2']['data_file']
-            sex = data['2']['sex'] #female or all
-            n_repeats = data['2']['n_repeats']
-            hormones = data['2']['hormones']
-            output_directory = data['2']['output_directory']
-            findFeatureMethod = data['2']['method_find_features']
-            list_models = data['2']['models']
-            normalization = data['2']['normalization']
-            select_pairs = data['2']['select_pairs']
-            change_status = data['2']['change_status']
-            #hormones to use
-            # table = pd.read_excel(output_file,sheet_name="All_data")
-            # aux = table.columns
-            hormones_combination = hormones
-           
-            
-           #for randomization
-            #title_file = sex + "_" + type + "_" + str(n_repeats) + "_" + str(num_permutations)
-            #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
-            #list_models = ["logistic","random_forest", "decision_tree","SVC_linear"]
-            #list_models = ["random_forest"]
-           
-
-            #model_dict ={}
+            type = data['1']['type'] 
+            input_file =data['1']['data_file']
+            sex = data['1']['sex'] #female or all
+            n_repeats = data['1']['n_repeats']
+            hormones = data['1']['hormones']
+            output_directory = data['1']['output_directory']
+            list_models = data['1']['models']
+            normalization = data['1']['normalization']
+            select_pairs = data['1']['select_pairs']
+        
             for  p in select_pairs:
                 title_file = sex + "_" + type + "_" + '_'.join(p)   
                 print('_'.join(p) )   
                 for model in list_models:
                         model_dict ={}
-                        new_obj = treat_data(output_file,p,change_status)
-                        results_dict = new_obj(model, normalization, n_repeats,sex,choice,findFeatureMethod,hormones_combination)
+                        new_obj = treat_data(input_file,p)
+                        results_dict = new_obj(model, normalization, n_repeats,sex,hormones)
                         print(model)
                         model_dict[model] = results_dict # for each model there is a dictionary
                         filename = output_directory + title_file + '.pkl'
-                        Auxiliary_functions.save_part_of_dict(filename, model, model_dict)
-
-                a=1
-                       
-           # filename = output_directory + title_file + '.pkl'        
-            # # Save the dictionary
-           # with open(output_directory + title_file + '.pkl', 'wb') as f:
-            #     pickle.dump(model_dict, f,protocol=pickle.HIGHEST_PROTOCOL)
-                
-     
-        
-        
-        elif choice == "3":
-            type = data['3']['type']
-            output_file =data['3']['data_file']
-            sex = data['3']['sex']
-            input_file = data['3']['data_features']
-            ouput_directory = data['3']['output_directory']
-            n_repeats = data['3']['n_repeats']
-             
-            hormones_combination = Find_better_features.get_best_combinations(input_file)
-            title_file = sex + "_" + type + "_" + str(n_repeats)
-            #list_models = ["SVC_linear","SVC_rbf","random_forest","logistic","GaussianNB"]
-            list_models = ["SVC_linear","SVC_rbf","random_forest","logistic", "decision_tree","k_neighbors","qda"]
-            hormones_dict = {} #for each hormone dict there are different models dict and each one has the results in the form of dict
-           
-            #loop to ge several hormone combinations
-            for count in range(len(hormones_combination)):
-                model_dict ={}
-                
-                for model in list_models:
-                    new_obj = treat_data(output_file)
-                    results_dict = new_obj(model, n_repeats,sex,choice,hormones_combination[count],type)
-                    model_dict[model] = results_dict # for each model there is a dictionary
-                    key_hormones = "-".join(hormones_combination[count])
-                    
-                    hormones_dict[key_hormones] = model_dict
-                    
-            # # Save the dictionary
-            with open(ouput_directory + title_file + '.pkl', 'wb') as f:
-                pickle.dump(hormones_dict, f)
-                
-
+                        Auxiliary_functions.save_part_of_dict(filename, model, model_dict) #for each pairs save a pkl function
+                Auxiliary_functions.save_as_excel(output_directory,title_file)
               
-        elif choice == "4": 
+        elif choice == "2": 
             type = data['4']['type']
             sex = data['4']['sex']
             n_repeats = data['4']['n_repeats']
@@ -126,95 +60,7 @@ def main_menu(choice,data):
                 new_obj = plot_data(data, title_file, ouput_directory,sex)
                 total_data, df_all_shape_values = new_obj(select_column_prob)
                 total_data_final = pd.concat([total_data_final, total_data], axis=0)
-                # if not df_all_shape_values.empty:
-                #     mode = 'a' if os.path.exists(ouput_directory +  "_" + type + '_shap_' + '_'.join(p) +  '.xlsx') else 'w'
-                #     with pd.ExcelWriter(ouput_directory +  "_" + type + '_shap_' + '_'.join(p) +  '.xlsx',mode=mode) as writer:
-                #         df_all_shape_values.to_excel(writer, sheet_name='shap_values', index=False)
-                #        # df_all_abs_shape_values.to_excel(writer, sheet_name='abs_shap_values', index=False)
-                    
-                
-                
-               # total_data_before_final = pd.concat([total_data_before_final, total_data_before], axis=0)
-            # mode = 'a' if os.path.exists(ouput_directory +  "_" + type + '.xlsx') else 'w'
-            # with pd.ExcelWriter(ouput_directory +  "_" + type + '.xlsx',mode=mode) as writer:
-            #     total_data_final.to_excel(writer, sheet_name=sex, index=False)
-            # #save before features selection    
-            # mode = 'a' if os.path.exists(ouput_directory +  "_" + "before_" + type + '.xlsx') else 'w'
-            # with pd.ExcelWriter(ouput_directory +  "_" + "before_" + type + '.xlsx',mode=mode) as writer:
-            #     total_data_before_final.to_excel(writer, sheet_name=sex, index=False)
-             
               
-               # df_all_features_values.to_excel(writer, sheet_name='features_values', index=False) 
-      
-        elif choice == "5":
-                 type = data['5']['type']
-                 sex = data['5']['sex']
-                 choice_m = data['5']['choice_m']
-                 n_repeats = data['5']['n_repeats']
-                 output_file =data['5']['data_file']
-                 index_initial_hormone = data['5']['index_begin'] -1
-                 index_final_hormone = data['5']['index_final'] 
-                 ouput_directory = data['5']['output_directory'] 
-                 features = {}
-                 
-                 data = pd.read_excel(output_file,sheet_name="All_data")
-                 hormones =  data.iloc[:,index_initial_hormone:index_final_hormone].columns.tolist()
-                 
-                 #models_list = ["SVC_linear","random_forest","logistic"] "SVC_rbf" doesnt work
-                 #models_list = ["SVC_linear","random_forest","logistic", "decision_tree","k_neighbors","adaboost","qda"]
-                 models_list = ["SVC_linear","random_forest","logistic", "decision_tree"]
-                 
-                 positive_feature = "alpha"
-                 title_file = 'Better_features' + '_' + sex + "_" + type + "_" + str(n_repeats)
-                 
-                 for model_name in models_list:
-                    new_obj = Find_better_features(output_file, positive_feature)
-                    final_features = new_obj(model_name,n_repeats, sex, choice_m, hormones,type)
-                    features[model_name] = {'sex' : sex, 'type' : type , 'final_features' : final_features}
-                    a=1
-                    
-                    # # Save the dictionary
-
-                 with open(ouput_directory + title_file + '.pkl', 'wb') as f:
-                    pickle.dump(features, f)
-                    
-        elif choice == "6": #for validation-do learning in all original file-and then check on the validation
-            type = data['6']['type']
-            train_file =data['6']['train_file']
-            validation_file = data['6']['validation_file']
-            sex = data['6']['sex']
-            choice = data['6']['choice']
-            n_repeats = data['6']['n_repeats']
-            output_file = data['6']['output_file']
-            
-            columns_validation = data['6']['columns_validation']
-            hormones_list =data['6']['hormones_list']
-            model = data['6']['model']
-            hormones_dict = {}
-            
-            for count, h in enumerate(hormones_list):
-              #convert h into list
-              hormones = h.split('-')
-              new_obj = treat_validation_data(train_file, validation_file,
-                                              columns_validation)
-              results_dict = new_obj(model[count] ,n_repeats, sex , choice , hormones)
-              hormones_dict[h] = results_dict
-              
-              #save as data frame
-            df= pd.DataFrame(hormones_dict)
-            df.to_excel(output_file)
-            
-        elif choice == '7': #plot tsne
-            input_file = data['7']['data_file']
-            sex = data['7']['sex']
-            hormones = data['7']['hormones']
-            output_directory = data['7']['output_directory']         
-            new_obj = General_functions(input_file)
-            new_obj(sex,hormones)
-        else:
-            print("Invalid choice. Please try again.")
-
-
 
 
 if __name__ == "__main__":
