@@ -28,7 +28,7 @@ class treat_data:
         selected_data = pd.DataFrame()
         if sex == "all":
           selected_data = self.data
-          selected_data['sex_num'] = selected_data['sex'].map({'female':0, 'male' : 1})
+         # selected_data['sex_num'] = selected_data['sex'].map({'female':0, 'male' : 1})
         else:
           selected_data = self.data[self.data['sex'] == sex]
           
@@ -39,7 +39,7 @@ class treat_data:
         #select the columns you are intrested
         selected_data = selected_data.copy()
         selection = hormones[:] #creates a shallow copy
-        selection.append('sex_num')
+       # selection.append('sex_num')
         information_data = selected_data.iloc[:,[0,1,2,3,4,5,6]]
         X = selected_data.loc[:,selection] # only features only classification
         y, labels = self.label_encoded(selected_data.loc[:,'Hierarchy']) #to numbers
@@ -52,7 +52,13 @@ class treat_data:
     '''
     def label_encoded(self,ydata):
       y_unique_values = ydata.unique()
-      custom_mapping = {'alpha' : 2, 'beta' : 1, 'epsilon' : 0 }
+      if len(y_unique_values) == 3:
+         custom_mapping = {'alpha' : 2, 'beta' : 1, 'delta' : 1,'epsilon' : 0 }
+      elif len(y_unique_values) == 5:
+         custom_mapping = {'alpha' : 4, 'beta' : 3, 'gamma' : 2, 'delta' : 1, 'epsilon' : 0 }
+      elif len(y_unique_values) == 2:
+         custom_mapping = {'alpha' : 1, 'beta' : 0, 'epsilon' : 0 , 'gamma' : 0, 'delta' : 0}
+         
       ydata_num = ydata.map(custom_mapping)
       
       yunique_numeric = [custom_mapping[label] for label in y_unique_values]
@@ -132,7 +138,8 @@ class treat_data:
          
          #create dictionary of the results
          results_dict = {}
-         predictions,predicted_probs,true_labels, all_shap_values, all_sex_values, all_mice_information  = [], [], [], [], [], []
+         predictions,predicted_probs,true_labels, all_shap_values, all_sex_values, all_mice_information, all_interaction_values  = [], [], [], [], [], [], []
+         number_labels = len(sorted_labels)
          # Set up Leave-One-Out Cross-Validation (LOOCV)
          loo = LeaveOneOut()
          
@@ -154,14 +161,15 @@ class treat_data:
             X_train_resampled, y_train_resampled = self.balance_data(X_train_scaled,y_train)
            
             # #check before
-            new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model_name)
+            new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model_name,number_labels)
                 
-            y_pred, y_prob, y_test, shap_values = new_obj()
+            y_pred, y_prob, y_test, shap_values, interaction_values = new_obj()
                 
             predictions.append(int(y_pred[0]))
             predicted_probs.append(y_prob[0].tolist())
             true_labels.append(int(y_test.iloc[0]))
             all_shap_values.append(shap_values)
+            all_interaction_values.append(interaction_values)
             
             if information_data is not None:
                all_mice_information.append(information_mice)
@@ -171,8 +179,8 @@ class treat_data:
 
          accuracy, precision,recall, f1,cm, balanced_acc = learning_data.metrics(predictions,predicted_probs,true_labels)     
          #Found the stable features  
-         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','shap_values','data_features','mice_information']
-         values = [sorted_labels, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, f1, all_shap_values,X, all_mice_information]                 
+         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','shap_values','interaction_shap','data_features','mice_information']
+         values = [sorted_labels, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, f1, all_shap_values,all_interaction_values,X, all_mice_information]                 
          results_dict = dict(zip(keys, values))   
     
          return results_dict

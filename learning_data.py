@@ -21,12 +21,13 @@ from sklearn.metrics import accuracy_score
 
 
 class learning_data:
-    def __init__(self,X_train,X_test,y_train, y_test,model):
+    def __init__(self,X_train,X_test,y_train, y_test,model,number_labels):
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
         self.model_name = model
+        self.number_labels = number_labels
         
     '''
     input: training data
@@ -54,9 +55,12 @@ class learning_data:
            model = GaussianNB()
       elif self.model_name == "xgboost":
            #model = xgb.XGBClassifier(use_label_encoder=False, eval_metric="logloss", random_state=42)
-          # model = xgb.XGBClassifier(objective="binary:logistic", use_label_encoder=False, eval_metric="logloss", random_state=42)
+          #model = xgb.XGBClassifier(objective="binary:logistic", use_label_encoder=False, eval_metric="logloss", random_state=42)
+          if self.number_labels > 2:
             model = xgb.XGBClassifier(objective="multi:softprob",num_class =3,
             n_estimators = 25, max_depth =2, reg_alpha = 1.0, use_label_encoder=False, eval_metric="logloss", random_state=42)
+          else:
+            model = xgb.XGBClassifier(objective="binary:logistic", use_label_encoder=False, eval_metric="logloss", random_state=42)
         #   model = xgb.XGBClassifier(objective="multi:softprob", use_label_encoder=False, eval_metric="logloss", random_state=42)
       
       model.fit(self.X_train, self.y_train)
@@ -70,20 +74,26 @@ class learning_data:
     output: better features with shap values
     ''' 
     def find_features(self, model):
-        
+          
           #For 3 classes, shap_values will be a list with 3 arrays (one per class)
           #agregate shape values
           if (self.model_name == "xgboost") or (self.model_name == "random_forest") or (self.model_name == "decision_tree"):
               explainer = shap.TreeExplainer(model)
               shap_values = explainer.shap_values(self.X_test)   
+              #shap_interaction_values is a 3D array: [n_samples, n_features, n_features]
+              #shap_interaction_values[i][j][k] is the interaction between feature j and k for sample i.
+              shap_interaction_values = explainer.shap_interaction_values(self.X_test)
           else:
               #compute Shap values
               explainer = shap.Explainer(model)
               shap_values = explainer(self.X_test)
               mean_abs_shap = np.abs(shap_values.values[:,:,1]).mean(axis=0) #take only dominant
               shapValues = shap_values.values[:,:,1]
+              n_samples, n_features = shapValues.shape 
+              shap_interaction_values = np.empty((n_samples, n_features, n_features))
               
-          return shap_values
+              
+          return shap_values, shap_interaction_values
     
  
     
@@ -135,7 +145,7 @@ class learning_data:
         #original data
         model = self.train_model()
         y_pred, y_prob, y_test = self.simple_test_model(model)
-        shap_values = self.find_features(model)
+        shap_values, interaction_values = self.find_features(model)
         
-        return y_pred, y_prob, y_test , shap_values 
+        return y_pred, y_prob, y_test , shap_values, interaction_values 
         
