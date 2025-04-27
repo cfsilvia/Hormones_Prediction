@@ -135,9 +135,9 @@ def main_menu(choice,data):
                 
                 
                # total_data_before_final = pd.concat([total_data_before_final, total_data_before], axis=0)
-            # mode = 'a' if os.path.exists(ouput_directory +  "_" + type + '.xlsx') else 'w'
-            # with pd.ExcelWriter(ouput_directory +  "_" + type + '.xlsx',mode=mode) as writer:
-            #     total_data_final.to_excel(writer, sheet_name=sex, index=False)
+            mode = 'a' if os.path.exists(ouput_directory +  "_" + type + '.xlsx') else 'w'
+            with pd.ExcelWriter(ouput_directory +  "_" + type + '.xlsx',mode=mode) as writer:
+                total_data_final.to_excel(writer, sheet_name=sex, index=False)
             # #save before features selection    
             # mode = 'a' if os.path.exists(ouput_directory +  "_" + "before_" + type + '.xlsx') else 'w'
             # with pd.ExcelWriter(ouput_directory +  "_" + "before_" + type + '.xlsx',mode=mode) as writer:

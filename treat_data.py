@@ -374,7 +374,7 @@ class treat_data:
      output_data: Fscore for each shuffle
      '''
     def  add_shuffling(self,selected_data,normalization, model,n_repeats,choice,findFeatureMethod, hormones):
-           n_iterations = 1000
+           n_iterations = 2
            permutations = set()
            # Create a generator with a fixed seed assure different permutation each time
            rng = np.random.default_rng(42)
