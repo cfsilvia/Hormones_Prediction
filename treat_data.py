@@ -88,17 +88,29 @@ class treat_data:
          not we change k_neighbors
     '''
     def balance_data(self,X,y):
-      # Step 1: Find the max class count
-      class_counts = Counter(y)
-      max_class_size = max(class_counts.values())
-      # Step 2: Create a sampling_strategy dict for SMOTE
-      # We want to upsample all smaller classes to the max
-      sampling_strategy = {
-         cls: max_class_size for cls, count in class_counts.items() if count < max_class_size
-        } 
-      # Step 3: Apply SMOTE with custom strategy
-      smote = SMOTE(sampling_strategy=sampling_strategy, random_state=42)
-      X_resampled, y_resampled = smote.fit_resample(X, y)
+      #find K-neighbors
+      classifies = np.unique(y)
+      if np.sum(y == classifies[0]) < np.sum(y == classifies[1]):
+        k_neighbors = np.sum(y == classifies[0]) -1
+      else:
+        k_neighbors = np.sum(y == classifies[1]) -1
+        
+      #with auto balanced exactly the 2 populations
+      #smote = SMOTE(sampling_strategy='auto', k_neighbors = k_neighbors)
+      smote = SMOTE(sampling_strategy='auto', k_neighbors = k_neighbors, random_state = 42) #take 4 since minority group is 5, 42 for reproducible
+      #smote = SMOTE(sampling_strategy='auto', k_neighbors = k_neighbors) 
+      X_resampled, y_resampled = smote.fit_resample(X, y) 
+      # # Step 1: Find the max class count
+      # class_counts = Counter(y)
+      # max_class_size = max(class_counts.values())
+      # # Step 2: Create a sampling_strategy dict for SMOTE
+      # # We want to upsample all smaller classes to the max
+      # sampling_strategy = {
+      #    cls: max_class_size for cls, count in class_counts.items() if count < max_class_size
+      #   } 
+      # # Step 3: Apply SMOTE with custom strategy
+      # smote = SMOTE(sampling_strategy=sampling_strategy, random_state=42)
+      # X_resampled, y_resampled = smote.fit_resample(X, y)
       
       return X_resampled, y_resampled 
     
@@ -159,7 +171,7 @@ class treat_data:
                 
             #balance the train data by using smote  with the larger class
             X_train_resampled, y_train_resampled = self.balance_data(X_train_scaled,y_train)
-           
+           # X_train_resampled, y_train_resampled = (X_train_scaled,y_train)
             # #check before
             new_obj = learning_data(X_train_resampled,X_test_scaled,y_train_resampled, y_test,model_name,number_labels)
                 

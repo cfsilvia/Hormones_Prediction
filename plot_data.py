@@ -12,8 +12,13 @@ from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib.colors import LinearSegmentedColormap
+from Shap_functions import custom_summary_plot
+from _violin import violin
+from _labels import labels
+from _violin_order import violin_order
+
 matplotlib.use('TkAgg') 
-import plot_violin_functions
+
 #plt.ion() # Turn on the interactive mode
 
 
@@ -29,33 +34,73 @@ class plot_data:
         if number_status == 3: #concentrate in the alpha profile
           a=1
         elif number_status == 2:
+          self.GetFeaturesOrder(model_name)
+          self.GetShapePerSex(model_name)
           self.GetGraphs(model_name)
           
+          
+          
+    '''
+    input: shap data plus features
+    output: order that should be the features from most important- like self- according to all
+    ''' 
+    def GetFeaturesOrder(self,model_name):
+      all_shap_values = self.data[model_name]['shap_values']
+      # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
+      all_shap_values_1 = np.concatenate(all_shap_values, axis=0)
+      X = self.data[model_name]['data_features']
+      feature_names = X.columns.tolist()   
+      
+      #reorder features according to absolute value
+      mean_abs_shap = np.abs(all_shap_values_1).mean(axis=0)
+      self.top_indices = np.argsort(mean_abs_shap)[::-1]
+      self.X_top = X.iloc[:,self.top_indices]
+      self.shap_values_top = all_shap_values_1[:,self.top_indices]
+      
+      '''
+      input: shap data
+      output: shap for each sex
+      '''
+    def GetShapePerSex(self,model_name):
+          all_shap_values = self.data[model_name]['shap_values']
+          # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
+          all_shap_values_1 = np.concatenate(all_shap_values, axis=0)   
+          mice_information = pd.concat(self.data[model_name]['mice_information'], axis = 0)
+          df_reset = mice_information.reset_index(drop = True) #reset the index
+          # Find the row number(s)
+          self.male_row_num = df_reset.index[df_reset['sex'] == 'male'].tolist()
+          self.female_row_num = df_reset.index[df_reset['sex'] == 'female'].tolist()
+          
+          self.shap_values_males =  all_shap_values_1[self.male_row_num,:]
+          self.shap_values_females =  all_shap_values_1[self.female_row_num,:]
+          self.X_top_males = self.X_top.iloc[self.male_row_num]
+          self.X_top_females = self.X_top.iloc[self.female_row_num,:]
           
     '''
     input:
     output: all the graphs
     '''
     def GetGraphs(self, model_name):
-      fig , axs = plt.subplots(2, 3, figsize=(10, 10))
+      fig , axs = plt.subplots(2, 2, figsize=(20, 10))
       fig.suptitle(tuple(self.data[model_name]['classes']), fontsize=10)
-      for i in range(6):
-            axs[i // 3, i % 3].set_axis_off()
+      for i in range(4):
+            axs[i // 2, i % 2].set_axis_off()
       #get graph of important features
       ax = axs[0,0]
       self.plotImportantFeatures(ax, model_name)
-      #get dot graph
+      #get violin all
       ax = axs[0,1]
-      self.plotDotFeatures(ax,model_name)
-      #get violin 
-      ax = axs[0,2]
-      self.plotViolinFeatures(ax,model_name)
-      #get important features which interact with the sex
-      ax = axs[1,0]
-      self.plotImportantFeaturesInteraction(ax,model_name)
+      self.plotViolinFeaturesCustom(ax,model_name, 'all')            
+      #get violin male
+      ax = axs[1,0]     
+      self.plotViolinFeaturesCustom_select(ax,model_name, 'male')
+      #get violin female
+      ax = axs[1,1]     
+      self.plotViolinFeaturesCustom_select(ax,model_name, 'female')
       
       plt.tight_layout()
-      plt.show()
+      #plt.show()
+      plt.savefig(self.output_directory + self.title  +'.pdf', format='pdf',dpi=300,bbox_inches='tight') 
       
     '''
     Important features
@@ -66,11 +111,12 @@ class plot_data:
       # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
       all_shap_values_1 = np.concatenate(all_shap_values, axis=0)
       X = self.data[model_name]['data_features']
-
+      feature_names = X.columns.tolist()
+      
       #graph
       plt.sca(ax)
       ax.set_axis_on()
-      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),plot_type="bar",show=False)
+      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),plot_type="bar",max_display=len(feature_names), show=False)
       ax.set_title('Important features',fontsize=8)
       ax.set_xlabel("mean(|SHAP value|) \n (average impact on model output)")
       ax.xaxis.label.set_size(6)
@@ -83,6 +129,136 @@ class plot_data:
       for tick in ax.get_xticklabels():
              tick.set_fontsize(6)
     
+    
+        
+    '''
+    Custom violin plot
+    '''
+    
+    def plotViolinFeaturesCustom(self,ax,model_name,sex):
+           
+      if sex == 'all':
+         features_names = self.X_top.columns.tolist()
+         shap_values =   self.shap_values_top  
+         features = self.X_top    
+      elif  sex == 'male':
+             shap_values =   self.shap_values_males[:,self.top_indices]  #order according to the top indices found with all
+             features_names = self.X_top.columns.tolist()
+             features = self.X_top_males    
+      elif sex == 'female': 
+           shap_values =   self.shap_values_females[:,self.top_indices]  
+           features_names = self.X_top.columns.tolist()
+           features = self.X_top_females   
+         
+      #graph
+      ax.set_axis_on()
+      plt.sca(ax)
+      
+      
+      violin(
+    shap_values,
+    features= features,
+    feature_names=features_names,
+    max_display=len(features_names),
+    plot_type = "violin",
+    sort=False, show=False
+    )
+      
+      for tick in ax.get_yticklabels():
+             tick.set_fontsize(6)
+      for tick in ax.get_xticklabels():
+             tick.set_fontsize(6)
+      ax.set_title(sex,fontsize=8)
+      ax.set_xlim(-2.5,2.5)
+      subdivisions = [-2.5,0,2.5]
+      ax.set_xticks(subdivisions)
+    
+    '''
+    Custom violin plot for females
+    '''
+    
+    def plotViolinFeaturesCustom_select(self,ax,model_name,sex):
+           
+     
+       features_names = self.X_top.columns.tolist()
+       shap_values =   self.shap_values_top  
+       features = self.X_top  
+         
+       if sex == 'male':
+             select_index = self.male_row_num  
+       elif sex == 'female':   
+           select_index = self.female_row_num
+      #graph
+       ax.set_axis_on()
+       plt.sca(ax)
+      
+      
+       violin_order(
+    shap_values,
+    features= features,
+    feature_names=features_names,
+    max_display=len(features_names),
+    plot_type = "violin",
+    sort=False, show=False, select_index = select_index,
+    )
+      
+       for tick in ax.get_yticklabels():
+              tick.set_fontsize(6)
+       for tick in ax.get_xticklabels():
+              tick.set_fontsize(6)
+       ax.set_title(sex,fontsize=8)
+       ax.set_xlim(-2.5,2.5)
+       subdivisions = [-2.5,0,2.5]
+       ax.set_xticks(subdivisions) 
+    
+    '''
+    Custom violin plot for males
+    '''
+    
+    def plotViolinFeaturesCustom_males(self,ax,model_name,sex):
+           
+      if sex == 'all':
+         features_names = self.X_top.columns.tolist()
+         shap_values =   self.shap_values_top  
+         features = self.X_top    
+      elif  sex == 'male':
+             shap_values =   self.shap_values_males[:,self.top_indices]  #order according to the top indices found with all
+             features_names = self.X_top.columns.tolist()
+             features = self.X_top_males    
+      elif sex == 'female': 
+           shap_values =   self.shap_values_females[:,self.top_indices]  
+           features_names = self.X_top.columns.tolist()
+           features = self.X_top_females   
+         
+      #graph
+      ax.set_axis_on()
+      plt.sca(ax)
+      
+      
+      violin(
+    shap_values,
+    features= features,
+    feature_names=features_names,
+    max_display=len(features_names),
+    plot_type = "violin",
+    sort=False, show=False
+    )
+      
+      for tick in ax.get_yticklabels():
+             tick.set_fontsize(6)
+      for tick in ax.get_xticklabels():
+             tick.set_fontsize(6)
+      ax.set_title(sex,fontsize=8)
+      ax.set_xlim(-2.5,2.5)
+      subdivisions = [-2.5,0,2.5]
+      ax.set_xticks(subdivisions) 
+    
+    
+    
+    
+    
+    ######################################No used
+    
     '''
     Dot features
     '''  
@@ -91,11 +267,12 @@ class plot_data:
       # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
       all_shap_values_1 = np.concatenate(all_shap_values, axis=0)
       X = self.data[model_name]['data_features']
+      feature_names = X.columns.tolist()
       
       #graph
       plt.sca(ax)
       ax.set_axis_on()
-      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),show=False)
+      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),max_display=len(feature_names),show=False)
       ax.set_title('Feature influence on prediction',fontsize=8)
       ax.set_xlabel("SHAP value \n (impact on model output)")
       ax.xaxis.label.set_size(6)
@@ -116,11 +293,12 @@ class plot_data:
       # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
       all_shap_values_1 = np.concatenate(all_shap_values, axis=0)
       X = self.data[model_name]['data_features']
+      feature_names = X.columns.tolist()
       
       #graph
       plt.sca(ax)
       ax.set_axis_on()
-      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),plot_type = 'violin', show=False)
+      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(), max_display=len(feature_names),show=False,sort = False)
       ax.set_title('Feature influence on prediction',fontsize=8)
       ax.set_xlabel("SHAP value \n (impact on model output)")
       ax.xaxis.label.set_size(6)
@@ -136,7 +314,8 @@ class plot_data:
       for collection in list(ax.collections):
              if isinstance(collection, mcoll.PathCollection):
                  collection.remove()
-                 
+
+                
     '''
      Features which interact with the sex
     '''

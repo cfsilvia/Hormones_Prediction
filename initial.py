@@ -65,7 +65,7 @@ def main_menu(choice,data):
 
 
 if __name__ == "__main__":
-    with open("F:/SilviaData/rutiFrishman/settings_windows.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
+    with open("F:/SilviaData/rutiFrishman/settings_windows_last_version.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    
     main_menu(choice,data)
