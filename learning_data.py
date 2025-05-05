@@ -60,8 +60,10 @@ class learning_data:
             model = xgb.XGBClassifier(objective="multi:softprob",num_class =3,
             n_estimators = 25, max_depth =2, reg_alpha = 1.0, use_label_encoder=False, eval_metric="logloss", random_state=42)
           else:
-            model = xgb.XGBClassifier(objective="binary:logistic", use_label_encoder=False, eval_metric="logloss", random_state=42)
+            model = xgb.XGBClassifier(objective="binary:logistic", max_depth =2, reg_lambda = 1,use_label_encoder=False, eval_metric="logloss", random_state=42)
         #   model = xgb.XGBClassifier(objective="multi:softprob", use_label_encoder=False, eval_metric="logloss", random_state=42)
+            # model = xgb.XGBClassifier(objective="binary:logistic",
+            # n_estimators = 25, max_depth =2, reg_lambda = 0.5, use_label_encoder=False, eval_metric="logloss", random_state=42)
       
       model.fit(self.X_train, self.y_train)
       return model

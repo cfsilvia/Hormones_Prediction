@@ -40,6 +40,7 @@ def main_menu(choice,data):
                         model_dict[model] = results_dict # for each model there is a dictionary
                         filename = output_directory + title_file + '.pkl'
                         Auxiliary_functions.save_part_of_dict(filename, model, model_dict) #for each pairs save a pkl function
+
                 Auxiliary_functions.save_as_excel(output_directory,title_file,len(p))
               
         elif choice == "2": 
@@ -49,6 +50,7 @@ def main_menu(choice,data):
             ouput_directory = data['2']['output_directory']
             select_pairs = data['2']['select_pairs']
             model_name = data['2']['model_name']
+            type_graph = data['2']['type_graph']
             
             total_data_final = pd.DataFrame()
             total_data_before_final = pd.DataFrame()
@@ -59,7 +61,7 @@ def main_menu(choice,data):
                    data = pickle.load(f)
                 
                 new_obj = plot_data(data, title_file, ouput_directory,sex)
-                new_obj(len(p),model_name)
+                new_obj(len(p),model_name,type_graph)
                 # total_data_final = pd.concat([total_data_final, total_data], axis=0)
               
 

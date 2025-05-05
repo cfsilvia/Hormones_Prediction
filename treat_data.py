@@ -215,11 +215,13 @@ class treat_data:
         return data
      
      
+    
+                
     '''
      input_data: shuffled data
      output_data: Fscore for each shuffle
      '''
-    def  add_shuffling(self,selected_data,normalization, model,n_repeats,choice,findFeatureMethod, hormones):
+    def  add_shuffling(self,X, y, sorted_labels,normalization, model, hormones,information_data):
            n_iterations = 1000
            permutations = set()
            # Create a generator with a fixed seed assure different permutation each time
@@ -228,10 +230,15 @@ class treat_data:
            all_fscore_class2 = []
            
            for i in range(n_iterations):
-                df_permutated = selected_data.copy()
-                 #permutate only the status
-                df_permutated['status'] = rng.permutation(df_permutated['status'])
-                results_dict = self.train_learning(df_permutated, normalization, model,n_repeats,choice,findFeatureMethod, hormones)
+                y_permutated = y.copy()
+                X_permutated = X.copy()
+                
+               # Get a shared permutation of the indices
+                perm = rng.permutation(X.shape[0])
+                y_perm = y.iloc[perm]
+                X_perm = X.iloc[perm]
+                
+                results_dict = self.train_learning(X_perm, y_perm, sorted_labels,normalization, model, hormones,information_data)
                 fscore = results_dict['fscore']
                 all_fscore_class1.append(fscore[0])
                 all_fscore_class2.append(fscore[1])
@@ -239,6 +246,8 @@ class treat_data:
 
            return all_fscore_class1, all_fscore_class2
                 
+    
+    
                 
 
   
@@ -251,11 +260,11 @@ class treat_data:
          X , y , information_data, sorted_labels = self.select_data(sex, hormones)
          results_dict = self.train_learning(X, y, sorted_labels, normalization, model, hormones, information_data)
         #  list_fscore = results_dict['fscore']
-        #  #add shuffling 
-        #  if (list_fscore[0] >= 0.6) and (list_fscore[1] >= 0.6):
-        #      all_fscore_class1, all_fscore_class2 = self.add_shuffling(selected_data,normalization, model,n_repeats,choice,findFeatureMethod, hormones)
-        #      results_dict['shuffle_fscore_class1'] = all_fscore_class1
-        #      results_dict['shuffle_fscore_class2'] = all_fscore_class2
+        #add shuffling 
+         
+         all_fscore_class1, all_fscore_class2 = self.add_shuffling(X, y, sorted_labels,normalization, model, hormones,information_data)
+         results_dict['shuffle_fscore_class1'] = all_fscore_class1
+         results_dict['shuffle_fscore_class2'] = all_fscore_class2
         #  else:
         #      results_dict['shuffle_fscore_class1'] = []
         #      results_dict['shuffle_fscore_class2'] = []

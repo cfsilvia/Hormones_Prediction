@@ -30,15 +30,24 @@ class plot_data:
         self.sex = sex
    
            
-    def __call__(self,number_status, model_name):
+    def __call__(self,number_status, model_name,type_graph):
         if number_status == 3: #concentrate in the alpha profile
           a=1
         elif number_status == 2:
           self.GetFeaturesOrder(model_name)
           self.GetShapePerSex(model_name)
-          self.GetGraphs(model_name)
+          self.GetGraphs(model_name,type_graph)
           
-          
+    '''
+    input:
+    output: all the graphs
+    '''
+    def GetGraphs(self, model_name,type_graph):
+      match type_graph:
+             case "shap_features_violin":
+                   self.PlotShape(model_name) 
+             case "random_permutation":
+                    self.PlotRandomPermutation(model_name)      
           
     '''
     input: shap data plus features
@@ -76,11 +85,43 @@ class plot_data:
           self.X_top_males = self.X_top.iloc[self.male_row_num]
           self.X_top_females = self.X_top.iloc[self.female_row_num,:]
           
+    
     '''
-    input:
-    output: all the graphs
+    plot random permutation
     '''
-    def GetGraphs(self, model_name):
+    def PlotRandomPermutation(self,model_name):
+           class_ = self.data[model_name]['classes']
+           fig , axs = plt.subplots(1, 2, figsize=(10, 5))
+           fig.suptitle(tuple(self.data[model_name]['classes']), fontsize=10)
+           for index in range(2):
+              plt.sca(axs[index]) 
+              axs[index].set_axis_on()
+              fscore_actual = (self.data[model_name]['fscore'])[index]
+              class_num =str(index +1)
+              pval = np.mean(self.data[model_name]['shuffle_fscore_class'+ class_num] >= fscore_actual)
+              plt.hist(self.data[model_name]['shuffle_fscore_class'+ class_num ], bins=6, alpha=0.7, color='blue', edgecolor='black')#bin 6
+              plt.axvline(fscore_actual, color='red',linestyle='--', label= f"Actual F-score = {fscore_actual}")
+              plt.text(fscore_actual + 0.1, plt.ylim()[1]*0.8, f"pvalue = {pval:.3f}", color='red',fontsize = 6)
+              axs[index].set_title('random permutation',fontsize=8)
+              axs[index].set_xlim(0,1)
+              axs[index].set_ylabel("Frequency")
+              axs[index].set_xlabel('shuffle_fscore_' + class_[index])
+              axs[index].xaxis.label.set_size(6)
+              axs[index].yaxis.label.set_size(6)
+           for tick in axs[index].get_yticklabels():
+             tick.set_fontsize(6)
+           for tick in axs[index].get_xticklabels():
+             tick.set_fontsize(6)  
+             
+           plt.tight_layout()
+            #plt.show()
+           plt.savefig(self.output_directory + self.title  +'_random_permutation.pdf', format='pdf',dpi=300,bbox_inches='tight') 
+      
+    
+    '''
+    plot shape values
+    '''
+    def PlotShape(self, model_name):
       fig , axs = plt.subplots(2, 2, figsize=(20, 10))
       fig.suptitle(tuple(self.data[model_name]['classes']), fontsize=10)
       for i in range(4):
