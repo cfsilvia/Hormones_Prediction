@@ -230,15 +230,16 @@ class treat_data:
            all_fscore_class2 = []
            
            for i in range(n_iterations):
+                print(i)
                 y_permutated = y.copy()
-                X_permutated = X.copy()
+                
                 
                # Get a shared permutation of the indices
                 perm = rng.permutation(X.shape[0])
-                y_perm = y.iloc[perm]
-                X_perm = X.iloc[perm]
+                y_perm = y_permutated.iloc[perm]
                 
-                results_dict = self.train_learning(X_perm, y_perm, sorted_labels,normalization, model, hormones,information_data)
+                
+                results_dict = self.train_learning(X, y_perm, sorted_labels,normalization, model, hormones,information_data)
                 fscore = results_dict['fscore']
                 all_fscore_class1.append(fscore[0])
                 all_fscore_class2.append(fscore[1])

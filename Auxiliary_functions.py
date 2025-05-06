@@ -110,7 +110,7 @@ def save_as_excel(ouput_directory,title_file,number_labels):
                  total_data.to_excel(writer, index=False)
                  
     #Save shap values
-    # shap_values_table = create_table_shap(data)
-    # mode = 'a' if os.path.exists(ouput_directory +  title_file  +  '_shap_values' +'.xlsx') else 'w'
-    # with pd.ExcelWriter(ouput_directory + title_file + '_shap_values' + '.xlsx',mode=mode) as writer:
-    #              shap_values_table.to_excel(writer, index=False)
+    shap_values_table = create_table_shap(data)
+    mode = 'a' if os.path.exists(ouput_directory +  title_file  +  '_shap_values' +'.xlsx') else 'w'
+    with pd.ExcelWriter(ouput_directory + title_file + '_shap_values' + '.xlsx',mode=mode) as writer:
+                 shap_values_table.to_excel(writer, index=False)
