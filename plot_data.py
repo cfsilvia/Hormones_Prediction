@@ -50,6 +50,8 @@ class plot_data:
                     self.Plot_random_cm(model_name) 
              case "shap_features_dotpoints":
                     self.shap_features_dotpoints(model_name)
+             case "roc_plot":
+                    self.plot_roc_plot(model_name)
           
     '''
     input: shap data plus features
@@ -310,8 +312,34 @@ class plot_data:
       subdivisions = [-2.5,0,2.5]
       ax.set_xticks(subdivisions) 
     
-    
-    
+    '''
+   plot roc curves
+   ''' 
+    def plot_roc_plot(self ,model_name):
+        fig , axs = plt.subplots(1, 1, figsize=(5, 5))
+        fig.suptitle(tuple(self.data[model_name]['classes']), fontsize=10)  
+       
+
+        fpr= self.data[model_name]['FPR']
+        tpr = self.data[model_name]['TPR']
+        roc_auc = self.data[model_name]['roc_auc_metrics']
+        
+        axs.plot(fpr, tpr)
+        axs.plot([0,1], [0,1], '--', label = 'Chance')
+        axs.set_xlabel('False positive rate')
+        axs.set_ylabel('True Positive Rate')
+        axs.set_xlim(0,1)
+        axs.set_ylim(0,1)
+        axs.set_title(f'Auc score = {roc_auc: .2f}')
+        
+        
+        
+        plt.tight_layout()
+       #plt.show()
+        plt.savefig(self.output_directory + self.title  +'_Roc_plot.pdf', format='pdf',dpi=300,bbox_inches='tight') 
+        
+        
+        a=1    
     
     
     ######################################No used

@@ -6,7 +6,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 import pandas as pd
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -130,11 +130,22 @@ class learning_data:
       # Calculate accuracy
       accuracy = accuracy_score(true_labels, predictions)
       balanced_acc = balanced_accuracy_score(true_labels, predictions)
-      #class1_probs = [arr[0][1] for arr in predicted_probs]
-      #roc_auc = roc_auc_score(true_labels, class1_probs)
-      #classes = model.classes_
+      # Compute ROC curve and AUC
+      class1_probs = [p[1] for p in predicted_probs]
+      fpr, tpr, thresholds = roc_curve(true_labels, class1_probs,  drop_intermediate=False)
+      roc_auc = auc(fpr, tpr)
       
-      return accuracy, precision,recall, f1,cm, balanced_acc
+      ths = np.linspace(0, 1, 10000)
+      fpr2, tpr2 = [], []
+
+      for t in ths:
+        y_pred = (class1_probs >= t).astype(int)
+        tn, fp, fn, tp = confusion_matrix(true_labels, y_pred).ravel()
+        fpr2.append(fp / (fp + tn))
+        tpr2.append(tp / (tp + fn))
+      
+      
+      return accuracy, precision,recall, f1,cm, balanced_acc,fpr2, tpr2, thresholds, roc_auc
     
     def refine_predictions(predictions, predicted_probs,custom_threshold):
       for i,arr in enumerate(predicted_probs):

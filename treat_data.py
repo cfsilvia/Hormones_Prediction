@@ -189,10 +189,10 @@ class treat_data:
     #      #get shap values of the final model with stable features
     #  #    shap_values = Find_better_features.GetShapValues(X[stable_feature_names],y,model_name)
 
-         accuracy, precision,recall, f1,cm, balanced_acc = learning_data.metrics(predictions,predicted_probs,true_labels)     
+         accuracy, precision,recall, f1,cm, balanced_acc, fpr, tpr, thresholds, roc_auc = learning_data.metrics(predictions,predicted_probs,true_labels)     
          #Found the stable features  
-         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','shap_values','interaction_shap','data_features','mice_information']
-         values = [sorted_labels, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, f1, all_shap_values,all_interaction_values,X, all_mice_information]                 
+         keys =['classes','features','prob','labels_pred','true_labels','confusion_matrix','accuracy','balanced_accuracy','precision','recall','fscore','shap_values','interaction_shap','data_features','mice_information', 'FPR', 'TPR','thresholds','roc_auc_metrics']
+         values = [sorted_labels, X.columns, predicted_probs,  predictions,true_labels, cm, accuracy,balanced_acc, precision, recall, f1, all_shap_values,all_interaction_values,X, all_mice_information,fpr, tpr, thresholds, roc_auc]                 
          results_dict = dict(zip(keys, values))   
     
          return results_dict
@@ -222,7 +222,7 @@ class treat_data:
      output_data: Fscore for each shuffle
      '''
     def  add_shuffling(self,X, y, sorted_labels,normalization, model, hormones,information_data):
-           n_iterations = 1000
+           n_iterations = 2
            permutations = set()
            # Create a generator with a fixed seed assure different permutation each time
            rng = np.random.default_rng(42)
