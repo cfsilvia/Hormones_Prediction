@@ -52,6 +52,8 @@ class plot_data:
                     self.shap_features_dotpoints(model_name)
              case "roc_plot":
                     self.plot_roc_plot(model_name)
+             case  "fscore_plot":
+                    self.plot_fscore_plot(model_name)
           
     '''
     input: shap data plus features
@@ -91,7 +93,29 @@ class plot_data:
           self.X_top_females = self.X_top.iloc[self.female_row_num,:]
           
     
-    
+    '''
+     input data: dictionary
+     output data: bar plot of the fscore
+    ''' 
+    def plot_fscore_plot(self, model_name):
+         fscore = self.data[model_name]['fscore']
+         categories = self.data[model_name]['classes']
+         colors = ['sandybrown', 'cornflowerblue'] 
+         fig , axs = plt.subplots(1, 1, figsize=(2, 2))
+         bar_width = 0.2
+         # Define spacing between bars
+         spacing = 0.2
+         # Compute bar positions
+         x = np.arange(len(categories)) * (bar_width + spacing)
+         plt.bar(x, fscore*100, color = colors, width = bar_width)
+         plt.axhline(y=50, color='black', linestyle='--', linewidth=1)
+         plt.xticks(x, categories)
+         plt.ylabel("F-score")
+         #plt.show()
+         plt.tight_layout()
+         #plt.show()
+         plt.savefig(self.output_directory + self.title + '_fscore_' +'.pdf', format='pdf',dpi=300,bbox_inches='tight') 
+
        
    
     
@@ -176,7 +200,7 @@ class plot_data:
       #graph
       plt.sca(ax)
       ax.set_axis_on()
-      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),plot_type="bar",max_display=len(feature_names), show=False)
+      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),plot_type="bar",color = "darkgrey",max_display=12, show=False)
       ax.set_title('Important features',fontsize=8)
       ax.set_xlabel("mean(|SHAP value|) \n (average impact on model output)")
       ax.xaxis.label.set_size(6)
@@ -219,7 +243,7 @@ class plot_data:
     shap_values,
     features= features,
     feature_names=features_names,
-    max_display=len(features_names),
+    max_display=12,
     plot_type = "violin",
     sort=False, show=False
     )
@@ -257,7 +281,7 @@ class plot_data:
     shap_values,
     features= features,
     feature_names=features_names,
-    max_display=len(features_names),
+    max_display=12,
     plot_type = "violin",
     sort=False, show=False, select_index = select_index,
     )
@@ -325,8 +349,8 @@ class plot_data:
         tpr = self.data[model_name]['TPR']
         roc_auc = self.data[model_name]['roc_auc_metrics']
         
-        axs.plot(fpr, tpr)
-        axs.plot([0,1], [0,1], '--', label = 'Chance')
+        axs.plot(fpr, tpr, color = "black")
+        axs.plot([0,1], [0,1], '--', label = 'Chance', color = "black")
         axs.set_xlabel('False positive rate')
         axs.set_ylabel('True Positive Rate')
         axs.set_xlim(0,1)
@@ -358,7 +382,7 @@ class plot_data:
       #graph
       plt.sca(ax)
       ax.set_axis_on()
-      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),max_display=len(feature_names),show=False)
+      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),max_display=12,show=False)
       ax.set_title('Feature influence on prediction',fontsize=8)
       ax.set_xlabel("SHAP value \n (impact on model output)")
       ax.xaxis.label.set_size(6)
@@ -384,7 +408,7 @@ class plot_data:
       #graph
       plt.sca(ax)
       ax.set_axis_on()
-      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(), max_display=len(feature_names),show=False,sort = False)
+      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(), max_display=12,show=False,sort = False)
       ax.set_title('Feature influence on prediction',fontsize=8)
       ax.set_xlabel("SHAP value \n (impact on model output)")
       ax.xaxis.label.set_size(6)
@@ -471,7 +495,10 @@ class plot_data:
              
                   ax.set_axis_on()
                   #Normalize by the total number of instances per class
-                  sns.heatmap(cm_percent, annot=True, fmt='.2%', cmap='Blues', cbar=False,xticklabels=class_names, yticklabels=class_names,annot_kws={"size": 8},ax =ax)
+                  soft_gray = LinearSegmentedColormap.from_list(
+                   "soft_gray", ["#e5e5e5", "#5e5e5e"]  # adjust hex colors for lighter/darker look
+                    )
+                  sns.heatmap(cm_percent, annot=True, fmt='.2%', cmap = soft_gray, cbar=False,xticklabels=class_names, yticklabels=class_names,annot_kws={"size": 8},ax =ax)
                   
                   ax.set_xlabel('Predicted Labels')
                   ax.set_ylabel('True Labels')

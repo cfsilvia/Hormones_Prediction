@@ -222,7 +222,7 @@ class treat_data:
      output_data: Fscore for each shuffle
      '''
     def  add_shuffling(self,X, y, sorted_labels,normalization, model, hormones,information_data):
-           n_iterations = 2
+           n_iterations = 500
            permutations = set()
            # Create a generator with a fixed seed assure different permutation each time
            rng = np.random.default_rng(42)

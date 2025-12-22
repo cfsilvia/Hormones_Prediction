@@ -10,6 +10,7 @@ from treat_validation_data import treat_validation_data
 from Find_better_features import Find_better_features
 from treat_random_data import treat_random_data
 from General_functions import General_functions
+from statistics_class import statistics_class
 import yaml
 from memory_profiler import profile
 import Auxiliary_functions
@@ -120,6 +121,15 @@ def main_menu(choice,data):
                 
                 new_obj = plot_data_personality(data, title_file, ouput_directory,sex)
                 new_obj(len(p),model_name,type_graph)
+        
+        elif choice == "5":
+            input_file = data['5']['input_file']
+            initial = data['5']['initial_excel_column_consider']
+            final = data['5']['final_excel_column_consider']
+
+            obj_statistics = statistics_class(input_file, initial, final)
+            obj_statistics()
+
               
 
 

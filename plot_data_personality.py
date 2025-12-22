@@ -123,7 +123,7 @@ class plot_data_personality:
     def plot_fscore_plot(self, model_name):
          fscore = self.data[model_name]['fscore']
          categories = self.data[model_name]['classes']
-         colors = ['magenta', 'cyan'] 
+         colors = ['sandybrown', 'cornflowerblue'] 
          fig , axs = plt.subplots(1, 1, figsize=(2, 2))
          bar_width = 0.2
          # Define spacing between bars
@@ -133,6 +133,7 @@ class plot_data_personality:
          plt.bar(x, fscore*100, color = colors, width = bar_width)
          plt.axhline(y=50, color='black', linestyle='--', linewidth=1)
          plt.xticks(x, categories)
+         plt.ylabel("F-score")
          #plt.show()
          plt.tight_layout()
          #plt.show()
@@ -196,11 +197,11 @@ class plot_data_personality:
       ax = axs[0,1]
       self.plotViolinFeaturesCustom(ax,model_name, 'all')            
       #get violin male
-#       ax = axs[1,0]     
-#       self.plotViolinFeaturesCustom_select(ax,model_name, 'male')
-#       #get violin female
-#       ax = axs[1,1]     
-#       self.plotViolinFeaturesCustom_select(ax,model_name, 'female')
+      ax = axs[1,0]      
+      self.plotViolinFeaturesCustom_select(ax,model_name, 'male')
+#      #get violin female
+      ax = axs[1,1]     
+      self.plotViolinFeaturesCustom_select(ax,model_name, 'female')
       
       plt.tight_layout()
       #plt.show()
@@ -259,11 +260,13 @@ class plot_data_personality:
       all_shap_values_1 = pd.DataFrame(np.vstack(all_shap_values))
       X = self.data[model_name]['data_features']
       feature_names = X.columns.tolist()
-      
+      #limit X data 23_11
+
+
       #graph
       plt.sca(ax)
       ax.set_axis_on()
-      shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),plot_type="bar",max_display=len(feature_names), show=False)
+      shap.summary_plot(all_shap_values_1, X , feature_names= X.columns.tolist(),plot_type="bar",color = "darkgrey",max_display=14, show=False) #CHANGE DISPLAY TO 14
       ax.set_title('Important features',fontsize=8)
       ax.set_xlabel("mean(|SHAP value|) \n (average impact on model output)")
       ax.xaxis.label.set_size(10)
@@ -308,7 +311,7 @@ class plot_data_personality:
     shap_values,
     features= features,
     feature_names=features_names,
-    max_display=len(features_names),
+    max_display=14,
     plot_type = "violin",
     sort=False, show=False
     )
@@ -332,7 +335,7 @@ class plot_data_personality:
            
      
        features_names = self.X_top.columns.tolist()
-       shap_values =   self.shap_values_top  
+       shap_values =   self.shap_values_top.values 
        features = self.X_top  
          
        if sex == 'male':
@@ -348,7 +351,7 @@ class plot_data_personality:
     shap_values,
     features= features,
     feature_names=features_names,
-    max_display=len(features_names),
+    max_display=14,
     plot_type = "violin",
     sort=False, show=False, select_index = select_index,
     )
@@ -416,8 +419,8 @@ class plot_data_personality:
         tpr = self.data[model_name]['TPR']
         roc_auc = self.data[model_name]['roc_auc_metrics']
         
-        axs.plot(fpr, tpr)
-        axs.plot([0,1], [0,1], '--', label = 'Chance')
+        axs.plot(fpr, tpr, color = "black")
+        axs.plot([0,1], [0,1], '--', label = 'Chance', color = "black")
         axs.set_xlabel('False positive rate')
         axs.set_ylabel('True Positive Rate')
         axs.set_xlim(0,1)
@@ -562,7 +565,11 @@ class plot_data_personality:
              
                   ax.set_axis_on()
                   #Normalize by the total number of instances per class
-                  sns.heatmap(cm_percent, annot=True, fmt='.2%', cmap='Blues', cbar=False,xticklabels=class_names, yticklabels=class_names,annot_kws={"size": 8},ax =ax)
+                  soft_gray = LinearSegmentedColormap.from_list(
+                   "soft_gray", ["#e5e5e5", "#5e5e5e"]  # adjust hex colors for lighter/darker look
+                    )
+
+                  sns.heatmap(cm_percent, annot=True, fmt='.2%', cmap= soft_gray,cbar=False,xticklabels=class_names, yticklabels=class_names,annot_kws={"size": 18},ax =ax)
                   
                   ax.set_xlabel('Predicted Labels')
                   ax.set_ylabel('True Labels')
