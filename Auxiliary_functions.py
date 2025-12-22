@@ -65,9 +65,11 @@ def  create_table_shap(data):
           
           features = (inner_dict['features']).tolist()
           
-          shap_values = inner_dict['shap_values']
-          shap_values = np.concatenate(shap_values, axis=0)
-          shap_values = pd.DataFrame(shap_values)
+          shap_values_aux = inner_dict['shap_values']
+          shap_values = pd.DataFrame(np.vstack(shap_values_aux))
+
+        #   shap_values = np.concatenate(shap_values, axis=0) #????NOVEMBER 2025
+        #   shap_values = pd.DataFrame(shap_values)#????NOVEMBER 2025
           shap_values.columns = features
         
           #get abs value and also the order of the features

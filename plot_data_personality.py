@@ -22,12 +22,13 @@ matplotlib.use('TkAgg')
 #plt.ion() # Turn on the interactive mode
 
 
-class plot_data:
+class plot_data_personality:
     def __init__(self,data,title,output_directory,sex):
         self.data = data
         self.title = title
         self.output_directory = output_directory
         self.sex = sex
+        
    
            
     def __call__(self,number_status, model_name,type_graph):
@@ -52,7 +53,92 @@ class plot_data:
                     self.shap_features_dotpoints(model_name)
              case "roc_plot":
                     self.plot_roc_plot(model_name)
-          
+             case  "fscore_plot":
+                    self.plot_fscore_plot(model_name)
+             case  "interaction_shap_plot":
+                    self.plot_shap_interaction(model_name)
+
+    '''
+    input data: interaction shap values
+    heat map: showing interaction
+    '''   
+    def plot_shap_interaction(self, model_name):
+         shap_interaction_values = np.array(self.data[model_name]['interaction_shap']) #(nsamples,1,nfeatures,nfeatures,2)
+         #remove second 1 dimension
+         shap_interaction_values = shap_interaction_values.squeeze(axis=1)
+         #since the selection is binary take the second class as important
+         interactions_shap_secondclass = shap_interaction_values[..., 1] #(nsamples, nfeatures, nfeatures)
+         #do the mean over all the samples
+         features = self.data[model_name]['features']
+         #average through the samples
+         mean_abs_interactions = pd.DataFrame(np.abs(interactions_shap_secondclass).mean(axis=0), index=features, columns= features)
+         #show interaction pairs
+         self.interaction_pairs(features, mean_abs_interactions)
+         #heat map
+         self.plot_shap_interactions(features, mean_abs_interactions)
+
+    '''
+    '''
+    def plot_shap_interactions(self, features, mean_abs_interactions):
+         plt.figure(figsize = (10,10))
+         mask = np.tril(np.ones_like(mean_abs_interactions, dtype=bool), k=0)
+
+         sns.heatmap(mean_abs_interactions, mask = mask, cmap = "coolwarm", square = True, cbar_kws = {'label': 'Mean |SHAP interaction|','shrink': 0.7}, linewidths=0.5)
+         plt.xticks(fontsize=7, fontname='Arial', rotation=45, ha="right")
+         plt.yticks(fontsize=7, fontname='Arial', rotation=0)
+         plt.title("Mean |SHAP interaction| (feature × feature)")
+
+         plt.tight_layout()
+         plt.savefig(self.output_directory + 'interaction_shap.pdf', format = "pdf")
+
+
+
+
+    '''
+    '''
+    def interaction_pairs(self,features, mean_abs_interactions ):
+         
+         pairs=[]
+         first_feature = []
+         second_feature = []
+         value = []
+
+         for i in range(10): #take the important features
+              for  j in range(i+1, 10):
+                   pairs.append((features[i], features[j], mean_abs_interactions.iloc[i,j]))
+         top_pairs = sorted(pairs, key=lambda t:t[2], reverse=True)
+         for a,b,val in top_pairs[:]:
+          first_feature.append(a)
+          second_feature.append(b)
+          value.append(val)
+         
+         total_data =pd.DataFrame({'first': first_feature, 'second':  second_feature, 'value_int': value})
+
+         total_data.to_excel(self.output_directory + 'Top_interactions_mean_shap_.xlsx', index = False)
+
+    '''
+     input data: dictionary
+     output data: bar plot of the fscore
+    ''' 
+    def plot_fscore_plot(self, model_name):
+         fscore = self.data[model_name]['fscore']
+         categories = self.data[model_name]['classes']
+         colors = ['magenta', 'cyan'] 
+         fig , axs = plt.subplots(1, 1, figsize=(2, 2))
+         bar_width = 0.2
+         # Define spacing between bars
+         spacing = 0.2
+         # Compute bar positions
+         x = np.arange(len(categories)) * (bar_width + spacing)
+         plt.bar(x, fscore*100, color = colors, width = bar_width)
+         plt.axhline(y=50, color='black', linestyle='--', linewidth=1)
+         plt.xticks(x, categories)
+         #plt.show()
+         plt.tight_layout()
+         #plt.show()
+         plt.savefig(self.output_directory + self.title + '_fscore_' +'.pdf', format='pdf',dpi=300,bbox_inches='tight') 
+
+
     '''
     input: shap data plus features
     output: order that should be the features from most important- like self- according to all
@@ -60,8 +146,8 @@ class plot_data:
     def GetFeaturesOrder(self,model_name):
       all_shap_values = self.data[model_name]['shap_values']
       # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
-      all_shap_values_1 = np.concatenate(all_shap_values, axis=0) 
-      
+      #all_shap_values_1 = np.concatenate(all_shap_values, axis=0) ?????November 2025
+      all_shap_values_1 = pd.DataFrame(np.vstack(all_shap_values))
       X = self.data[model_name]['data_features']
       feature_names = X.columns.tolist()   
       
@@ -69,7 +155,7 @@ class plot_data:
       mean_abs_shap = np.abs(all_shap_values_1).mean(axis=0)
       self.top_indices = np.argsort(mean_abs_shap)[::-1]
       self.X_top = X.iloc[:,self.top_indices]
-      self.shap_values_top = all_shap_values_1[:,self.top_indices]
+      self.shap_values_top = all_shap_values_1.iloc[:,self.top_indices]
       
       '''
       input: shap data
@@ -99,7 +185,7 @@ class plot_data:
     plot shape values
     '''
     def PlotShape(self, model_name):
-      fig , axs = plt.subplots(2, 2, figsize=(20, 10))
+      fig , axs = plt.subplots(2, 2, figsize=(5, 5))
       fig.suptitle(tuple(self.data[model_name]['classes']), fontsize=10)
       for i in range(4):
             axs[i // 2, i % 2].set_axis_off()
@@ -110,11 +196,11 @@ class plot_data:
       ax = axs[0,1]
       self.plotViolinFeaturesCustom(ax,model_name, 'all')            
       #get violin male
-      ax = axs[1,0]     
-      self.plotViolinFeaturesCustom_select(ax,model_name, 'male')
-      #get violin female
-      ax = axs[1,1]     
-      self.plotViolinFeaturesCustom_select(ax,model_name, 'female')
+#       ax = axs[1,0]     
+#       self.plotViolinFeaturesCustom_select(ax,model_name, 'male')
+#       #get violin female
+#       ax = axs[1,1]     
+#       self.plotViolinFeaturesCustom_select(ax,model_name, 'female')
       
       plt.tight_layout()
       #plt.show()
@@ -169,7 +255,8 @@ class plot_data:
     def plotImportantFeatures(self,ax,model_name):
       all_shap_values = self.data[model_name]['shap_values']
       # Concatenate SHAP values from all folds (shape: (n_samples, n_features))
-      all_shap_values_1 = np.concatenate(all_shap_values, axis=0)
+      #all_shap_values_1 = np.concatenate(all_shap_values, axis=0)
+      all_shap_values_1 = pd.DataFrame(np.vstack(all_shap_values))
       X = self.data[model_name]['data_features']
       feature_names = X.columns.tolist()
       
@@ -179,15 +266,17 @@ class plot_data:
       shap.summary_plot(all_shap_values_1, X , feature_names=X.columns.tolist(),plot_type="bar",max_display=len(feature_names), show=False)
       ax.set_title('Important features',fontsize=8)
       ax.set_xlabel("mean(|SHAP value|) \n (average impact on model output)")
-      ax.xaxis.label.set_size(6)
+      ax.xaxis.label.set_size(10)
       ax.yaxis.label.set_size(6)
-      ax.set_xlim(0,1.5)
-      subdivisions = [0,0.5,1,1.5]  # every 0.5 units
+      ax.set_xlim(0,2)
+      subdivisions = [0,1,2]  # every 0.5 units
+#       ax.set_xlim(0,0.1)
+#       subdivisions = [0,0.05,0.1] 
       ax.set_xticks(subdivisions)
       for tick in ax.get_yticklabels():
-             tick.set_fontsize(6)
+             tick.set_fontsize(8)
       for tick in ax.get_xticklabels():
-             tick.set_fontsize(6)
+             tick.set_fontsize(8)
     
     
         
@@ -214,7 +303,7 @@ class plot_data:
       ax.set_axis_on()
       plt.sca(ax)
       
-      
+      shap_values =  shap_values.to_numpy()   
       violin(
     shap_values,
     features= features,
@@ -225,12 +314,14 @@ class plot_data:
     )
       
       for tick in ax.get_yticklabels():
-             tick.set_fontsize(6)
+             tick.set_fontsize(8)
       for tick in ax.get_xticklabels():
-             tick.set_fontsize(6)
+             tick.set_fontsize(8)
       ax.set_title(sex,fontsize=8)
-      ax.set_xlim(-2.5,2.5)
-      subdivisions = [-2.5,0,2.5]
+      ax.set_xlim(-2,2)
+      subdivisions = [-2,0,2]
+#       ax.set_xlim(-0.1,0.1)
+#       subdivisions = [-0.1,0.05,0.1] 
       ax.set_xticks(subdivisions)
     
     '''

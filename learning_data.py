@@ -85,6 +85,9 @@ class learning_data:
               #shap_interaction_values is a 3D array: [n_samples, n_features, n_features]
               #shap_interaction_values[i][j][k] is the interaction between feature j and k for sample i.
               shap_interaction_values = explainer.shap_interaction_values(self.X_test)
+              if self.model_name == "random_forest":
+                 shap_values = shap_values[...,1].squeeze() #only the positive class is considered
+
           else:
               #compute Shap values
               explainer = shap.Explainer(model)

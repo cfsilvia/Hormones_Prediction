@@ -1,9 +1,11 @@
 from manage_data import manage_data
-from manage_data_AviCondition import manage_data_AviCondition
+from create_personality import create_personality
 from treat_data import treat_data
+from treat_data_personality import treat_data_personality
 import pandas as pd
 import pickle
 from plot_data import plot_data
+from plot_data_personality import plot_data_personality
 from treat_validation_data import treat_validation_data
 from Find_better_features import Find_better_features
 from treat_random_data import treat_random_data
@@ -63,11 +65,66 @@ def main_menu(choice,data):
                 new_obj = plot_data(data, title_file, ouput_directory,sex)
                 new_obj(len(p),model_name,type_graph)
                 # total_data_final = pd.concat([total_data_final, total_data], axis=0)
+         
+        elif choice == "3": #create the status of personality
+             file_pareto = data['3']['data_pareto']
+             output_dir = data['3']['output_dir']
+             hormones_file = data['3']['hormones_file']
+             list_models = data['3']['models']
+             normalization = data['3']['normalization']
+             select_pairs = data['3']['select_pairs']
+             hormones = data['3']['hormones']
+             sex = data['3']['sex'] #female or all
+             n_repeats = data['3']['n_repeats']
+             type_personality = data['3']['type_personality']
+             create_table = data['3']['create_table']
+             run_model = data['3']['run_model']
+
+             if create_table:
+               new_obj = create_personality(file_pareto,output_dir, hormones_file)
+               data_to_predict = new_obj(select_pairs) #one pair per time
+
+             if run_model:  
+             
+              for  p in select_pairs:
+                data_to_predict = pd.read_excel((output_dir + 'weights_all_pairs_with_hormones.xlsx'), sheet_name = (str(p[0]) + '_' + str(p[1])))
+
+                title_file = sex +  '_'.join(p)   
+                print('_'.join(p) )   
+                for model in list_models:
+                        model_dict ={}
+                        new_obj = treat_data_personality(data_to_predict,p)
+                        results_dict = new_obj(model, normalization, n_repeats,sex,hormones)
+                        print(model)
+                        model_dict[model] = results_dict # for each model there is a dictionary
+                        filename = output_dir + title_file + '.pkl'
+                        Auxiliary_functions.save_part_of_dict(filename, model, model_dict)
+                Auxiliary_functions.save_as_excel(output_dir,title_file,len(p))
+
+        elif choice == "4": 
+            
+            sex = data['4']['sex']
+            n_repeats = data['4']['n_repeats']
+            ouput_directory = data['4']['output_directory']
+            select_pairs = data['4']['select_pairs']
+            model_name = data['4']['model_name']
+            type_graph = data['4']['type_graph']
+            
+            total_data_final = pd.DataFrame()
+            total_data_before_final = pd.DataFrame()
+            for  p in select_pairs:
+                title_file = sex + '_'.join(p)  
+                # Load the Pickle file
+                with open(ouput_directory + title_file + '.pkl', "rb") as f:
+                   data = pickle.load(f)
+                
+                new_obj = plot_data_personality(data, title_file, ouput_directory,sex)
+                new_obj(len(p),model_name,type_graph)
               
 
 
 if __name__ == "__main__":
-    with open("F:/SilviaData/rutiFrishman/settings_windows_last_version.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
+    with open("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/settings_windows_last_version_october_2025.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    
     main_menu(choice,data)
