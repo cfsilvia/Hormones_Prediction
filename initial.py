@@ -81,14 +81,16 @@ def main_menu(choice,data):
              create_table = data['3']['create_table']
              run_model = data['3']['run_model']
 
-             if create_table:
+             if create_table == True:
                new_obj = create_personality(file_pareto,output_dir, hormones_file)
-               data_to_predict = new_obj(select_pairs) #one pair per time
+               data_to_predict = new_obj() #create the table with the personality status for each data point
 
              if run_model:  
              
+
+
               for  p in select_pairs:
-                data_to_predict = pd.read_excel((output_dir + 'weights_all_pairs_with_hormones.xlsx'), sheet_name = (str(p[0]) + '_' + str(p[1])))
+                data_to_predict = pd.read_excel((output_dir + 'data_for_model_with_assignment.xlsx'))
 
                 title_file = sex +  '_'.join(p)   
                 print('_'.join(p) )   
@@ -131,10 +133,12 @@ def main_menu(choice,data):
             obj_statistics()
 
               
+              
 
 
 if __name__ == "__main__":
     with open("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/settings_windows_last_version_october_2025.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    
+
     main_menu(choice,data)
