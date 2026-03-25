@@ -1,20 +1,24 @@
 from manage_data import manage_data
 from create_personality import create_personality
 from treat_data import treat_data
-from treat_data_personality import treat_data_personality
+#from treat_data_personality import treat_data_personality
 import pandas as pd
 import pickle
 from plot_data import plot_data
 from plot_data_personality import plot_data_personality
 from treat_validation_data import treat_validation_data
 from Find_better_features import Find_better_features
-from treat_random_data import treat_random_data
+from treat_continous_labels_1 import treat_continous_labels
 from General_functions import General_functions
 from statistics_class import statistics_class
 import yaml
 from memory_profiler import profile
 import Auxiliary_functions
 import os
+from scipy.stats import mannwhitneyu
+from Pareto import PCHA
+
+
 #from sklearn.ensemble import AdaBoostClassifier
 @profile
 def main_menu(choice,data):
@@ -67,42 +71,42 @@ def main_menu(choice,data):
                 new_obj(len(p),model_name,type_graph)
                 # total_data_final = pd.concat([total_data_final, total_data], axis=0)
          
-        elif choice == "3": #create the status of personality
-             file_pareto = data['3']['data_pareto']
-             output_dir = data['3']['output_dir']
-             hormones_file = data['3']['hormones_file']
-             list_models = data['3']['models']
-             normalization = data['3']['normalization']
-             select_pairs = data['3']['select_pairs']
-             hormones = data['3']['hormones']
-             sex = data['3']['sex'] #female or all
-             n_repeats = data['3']['n_repeats']
-             type_personality = data['3']['type_personality']
-             create_table = data['3']['create_table']
-             run_model = data['3']['run_model']
+        # elif choice == "3": #create the status of personality
+        #      file_pareto = data['3']['data_pareto']
+        #      output_dir = data['3']['output_dir']
+        #      hormones_file = data['3']['hormones_file']
+        #      list_models = data['3']['models']
+        #      normalization = data['3']['normalization']
+        #      select_pairs = data['3']['select_pairs']
+        #      hormones = data['3']['hormones']
+        #      sex = data['3']['sex'] #female or all
+        #      n_repeats = data['3']['n_repeats']
+        #      type_personality = data['3']['type_personality']
+        #      create_table = data['3']['create_table']
+        #      run_model = data['3']['run_model']
 
-             if create_table == True:
-               new_obj = create_personality(file_pareto,output_dir, hormones_file)
-               data_to_predict = new_obj() #create the table with the personality status for each data point
+        #      if create_table == True:
+        #        new_obj = create_personality(file_pareto,output_dir, hormones_file)
+        #        data_to_predict = new_obj() #create the table with the personality status for each data point
 
-             if run_model:  
+        #      if run_model:  
              
 
 
-              for  p in select_pairs:
-                data_to_predict = pd.read_excel((output_dir + 'data_for_model_with_assignment.xlsx'))
+        #       for  p in select_pairs:
+        #         data_to_predict = pd.read_excel((output_dir + 'data_for_model_with_assignment.xlsx'))
 
-                title_file = sex +  '_'.join(p)   
-                print('_'.join(p) )   
-                for model in list_models:
-                        model_dict ={}
-                        new_obj = treat_data_personality(data_to_predict,p)
-                        results_dict = new_obj(model, normalization, n_repeats,sex,hormones)
-                        print(model)
-                        model_dict[model] = results_dict # for each model there is a dictionary
-                        filename = output_dir + title_file + '.pkl'
-                        Auxiliary_functions.save_part_of_dict(filename, model, model_dict)
-                Auxiliary_functions.save_as_excel(output_dir,title_file,len(p))
+        #         title_file = sex +  '_'.join(p)   
+        #         print('_'.join(p) )   
+        #         for model in list_models:
+        #                 model_dict ={}
+        #                 new_obj = treat_data_personality(data_to_predict,p)
+        #                 results_dict = new_obj(model, normalization, n_repeats,sex,hormones)
+        #                 print(model)
+        #                 model_dict[model] = results_dict # for each model there is a dictionary
+        #                 filename = output_dir + title_file + '.pkl'
+        #                 Auxiliary_functions.save_part_of_dict(filename, model, model_dict)
+        #         Auxiliary_functions.save_as_excel(output_dir,title_file,len(p))
 
         elif choice == "4": 
             
@@ -118,6 +122,8 @@ def main_menu(choice,data):
             for  p in select_pairs:
                 title_file = sex + '_'.join(p)  
                 # Load the Pickle file
+
+                
                 with open(ouput_directory + title_file + '.pkl', "rb") as f:
                    data = pickle.load(f)
                 
@@ -129,14 +135,62 @@ def main_menu(choice,data):
             initial = data['5']['initial_excel_column_consider']
             final = data['5']['final_excel_column_consider']
 
+
+
+
+
             obj_statistics = statistics_class(input_file, initial, final)
             obj_statistics()
-
+   
               
-              
+        elif choice == "6":
+           file_pareto = data['6']['data_pareto']
+           output_dir = data['6']['output_dir']
+           hormones_file = data['6']['hormones_file']
+           create_table = data['6']['create_table']
+           run_model = data['6']['run_model']
+           run_correlation = data['6']['run_correlation']
+           run_features_normalization = data['6']['run_features_normalization']
+           type_model = data['6']['type_model']
 
 
+
+           if create_table:
+                new_obj = create_personality(file_pareto,output_dir, hormones_file)
+                data_to_predict = new_obj() #create the table with the personality status for each data point
+
+           if run_model:  
+
+                new_obj = treat_continous_labels(output_dir + 'data_for_model_with_biomarkers.xlsx',output_dir,run_features_normalization, type_model)
+                new_obj()
+
+           if run_correlation:
+                new_obj = General_functions(output_dir + 'data_for_model_with_biomarkers.xlsx',output_dir)
+                new_obj()
+
+        elif choice == "7": 
+                input_file = data['7']['input_file']
+                output_dir = data['7']['output_dir']
+                
+                # Load your PCA data
+                df = pd.read_excel(input_file)
+                X = df.values
+
+                model = PCHA(k=4, n_iter=50)
+                model.fit(X, compute_pvalues=True)
+
+                model.save_to_excel( output_dir + 'pcha_results.xlsx'
+                                    )
+                model.plot_3d()
+                # Save results
+               # model.save()
+
+
+
+     
+                
 if __name__ == "__main__":
+
     with open("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/settings_windows_last_version_october_2025.yml", "r") as file: #CHANGE WHEN NECCESSARY DIRECTORY OF SETTINGS
         data = yaml.safe_load(file)
     choice = data['choice']    

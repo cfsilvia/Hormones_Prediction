@@ -1,106 +1,128 @@
 import pandas as pd
-from sklearn.manifold import TSNE
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from scipy.stats import pearsonr, spearmanr
+from statsmodels.stats.multitest import multipletests
+import matplotlib.colors as mcolors
 
 class General_functions:
-   def __init__(self,input_file):
-         self.input_file = input_file
-         self.data = pd.read_excel(input_file,sheet_name="All_data")
-   
-   '''
-    input: data sex, choice, hormones panel architype
-    select: the data either for hierarchy or architype
-    '''
-   def select_data(self,sex = None, hormones = None):
-        #select sex
-        
-        selected_data = pd.DataFrame()
-        if sex == "all":
-          selected_data = self.data
-        else:
-          selected_data = self.data[self.data['sex'] == sex]
-       
-        selected_data['status'] = selected_data['Hierarchy']
-         
-        #select hormones and status
-       
-            #add a columns to distinguish each arena experiment with numbers, beggining from 1
-        selected_data = selected_data.copy()
-        selected_data['groups'] =  selected_data['Experiment'].str[-3:]
-        selection = hormones[:] #creates a shallow copy
-        selection.append('status')
-        selection.append('groups')
-        selected_data = selected_data.loc[:,selection]
-            
-            
-     
-        return selected_data
-    
-   '''
-    input : data
-    output: add ratios if there are
-    '''
-   @staticmethod
-   def addRatios(data, hormones):
-        result = [item for item in hormones if '_' in item]
-        if not result:
-          print("The list is empty")
-        else:
-         for r in result:
-          parts = r.split('_')
-          first_part = parts[0]
-          last_part = parts[-1]
-          data[r] = data[first_part]/data[last_part]
-        return data  
-    
-   '''
-    input: data
-    output: tsne graph
-    '''
-   @staticmethod
-   def tsne_plot(data,sex):
-       #create a t-SNE object
-       tsne = TSNE(n_components = 2, perplexity = 5, n_iter=2000, random_state=42)
-       #select all the features
-       features = data.iloc[:,:-2]
-       # Normalize the data using StandardScaler
-    #    scaler = StandardScaler()
-    #    X_normalized = scaler.fit_transform(features)
 
-       #fit t-sne on the data and transform it
-       X_tsne = tsne.fit_transform(features)
-       #labels is the status
-       labels = data.iloc[:,-2]
-       text_labels = data.iloc[:,-1]
-       color_map ={'alpha': 'red', 'beta':'blue','gamma':'green','delta':'yellow','epsilon': 'cyan'}
-       labels_c =[color_map[i] for i in labels]
-       # Plot the 2D representation with colors based on the labels
-       plt.figure(figsize=(8, 6))
-       plt.scatter(X_tsne[:, 0], X_tsne[:, 1], c=labels_c)
-       
-       legend_handles = [mpatches.Patch(color=color_map[label], label=f' {label}')
-                  for label in np.unique(labels)]
-       
-       
-# Add labels to each point
-       for i, txt in enumerate(text_labels.tolist()):
-               plt.text(X_tsne[i, 0], X_tsne[i, 1], txt, fontsize=9, ha="right", va="bottom")
-              
-       plt.legend(handles=legend_handles, title=" ")
-       plt.title("t-SNE Visualization with hierarchy data "+ sex)
-       plt.xlabel("Dimension 1")
-       plt.ylabel("Dimension 2")
-       
-       plt.show()
-       
-       
+    def __init__(self, data_path, output_dir):
+        self.data_path = data_path
+        self.output_dir = output_dir
+
+    def __call__(self):
+        corr_df = self.correlation_matrix()
+        self.plot_all_pareto(corr_df)
+        corr_df = self.correlation_matrix("female")
+        self.plot_all_pareto(corr_df, "female")
+        corr_df = self.correlation_matrix("male")
+        self.plot_all_pareto(corr_df, "male")
+
+
+#####################Correlation matrix #########################
+    def correlation_matrix(self, sex = None):
+        data = pd.read_excel(self.data_path)
+        if sex is not None:
+            data = data[data['sex'] == sex]
+
+        # Define features and targets based on the structure used in treat_continous_labels
+        X = data.drop(
+            ['Experiment','sex','Type','Genotype','Hierarchy','Mice.chips',
+             'Last.day.Glicko','Animal','Arch1','Arch2','Arch3','Arch4'], axis=1)
+        y = data[['Arch1','Arch2','Arch3','Arch4']]
+
+        correlations = []
+        for target in y.columns:
+            for feature in X.columns:
+                r, p = spearmanr(X[feature], y[target])
+                correlations.append({
+                    'Feature': feature,
+                    'Arch': target,
+                    'Spearman_r': r,
+                    'p_value': p
+                })
+
+        corr_df = pd.DataFrame(correlations)
+
+        # Add BH correction for p-values
+        reject, pvals_corrected, _, _ = multipletests(corr_df['p_value'], alpha=0.1, method='fdr_bh')
+        corr_df['p_value_adj'] = pvals_corrected
+
+        if sex is  None:
+          corr_df.to_excel(self.output_dir + 'feature_target_correlations.xlsx', index=False)
+        else:
+           corr_df.to_excel(self.output_dir +  sex  + '_feature_target_correlations.xlsx', index=False) 
+        
+        return corr_df
     
-   def  __call__(self, sex = None, hormones = None):  
-       #add ratios if there are
-       self.data = General_functions.addRatios(self.data,hormones) 
-       selected_data = self.select_data(sex, hormones) 
-       General_functions.tsne_plot(selected_data,sex)
-       a=1
+    ######################Do graph to show significant correlation#################
+    def plot_all_pareto(self, corr_df, sex = None):
+        archetypes = corr_df['Arch'].unique()
+        fig, axes = plt.subplots(1, 4, figsize=(20, 8))
+        if sex is  None:
+            fig.suptitle('Significant Spearman Correlations with Archetypes (p < 0.1)', fontsize=16)
+        else:
+            fig.suptitle(sex + 'Significant Spearman Correlations with Archetypes (p < 0.1)', fontsize=16)
+            
+        axes = axes.flatten()
+        colors = ['pink','purple','orange', 'green']
+        for i, arch_name in enumerate(archetypes):
+            if i < len(axes):
+                self.plot_pareto(corr_df, arch_name, ax=axes[i], color = colors[i])
+
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        if sex is  None:
+          plt.savefig(self.output_dir + 'feature_target_correlations_plots.pdf')
+        else:
+           plt.savefig(self.output_dir +  sex  + '_feature_target_correlations_plots.pdf')
+
+        plt.close()
+    
+    #######################do the plot for each archetype#########################################
+    def plot_pareto(self, corr_df, arch_name, ax, color):
+        corr_method = "spearman"
+
+        subset = corr_df[corr_df["Arch"] == arch_name].copy()
+        subset = subset[subset['p_value'] < 0.1]
+        subset = subset.sort_values("Spearman_r", ascending=True)
+
+        y = np.arange(len(subset))
+         # small gap so line doesn't touch the dot
+        gap = 0.02
+        line_end = subset["Spearman_r"] - np.sign(subset["Spearman_r"]) * gap
+
+
+        ax.hlines(
+            y=y,
+            xmin=0,
+            xmax=line_end,
+            color="black",
+            alpha=0.7
+        )
+
+        # Set alpha based on p-value: more transparent for 0.05 <= p < 0.1
+        alphas = np.where(subset['p_value'] < 0.05, 1.0, 0.4)
+        base_color = mcolors.to_rgba(color)
+        scatter_colors = [(*base_color[:3], alpha) for alpha in alphas]
+
+        ax.scatter(
+            subset["Spearman_r"],
+            y,
+            color=scatter_colors,
+            s=90
+        )
+  
+        ax.set_yticks(y, labels=subset["Feature"])
+        ax.axvline(0, color="black")
+
+        ax.set_xlabel(f"{corr_method.capitalize()} correlation")
+        ax.set_title(f"{arch_name}")
+
+        # Remove plot borders
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.tick_params(left=False)
+

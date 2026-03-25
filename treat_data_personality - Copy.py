@@ -31,16 +31,15 @@ class treat_data_personality:
           
         #select hierarchy mice
         if self.select_pairs:
-          selected_data = selected_data[selected_data['assigned_arch'].isin(self.select_pairs)]
+          selected_data = selected_data[selected_data['personality'].isin(self.select_pairs)]
        
         #select the columns you are intrested
         selected_data = selected_data.copy()
-       # selection = hormones[:] #creates a shallow copy
+        selection = hormones[:] #creates a shallow copy
        # selection.append('sex_num')
-        information_data = selected_data.iloc[:,[0,1,2,3,4,5,7]]
-        
-        X = selected_data.iloc[:,8:39] # only features only classification
-        y, labels = self.label_encoded(selected_data.loc[:,'assigned_arch']) #to numbers
+        information_data = selected_data.iloc[:,[0,1,2,3,4,5,6]]
+        X = selected_data.loc[:,selection] # only features only classification
+        y, labels = self.label_encoded(selected_data.loc[:,'personality']) #to numbers
 
         return X , y , information_data, labels
     
@@ -51,7 +50,7 @@ class treat_data_personality:
     def label_encoded(self,ydata):
       y_unique_values = ydata.unique()
       if len(y_unique_values) == 2:
-         custom_mapping = {self.select_pairs[0] : 0, self.select_pairs[1] : 1}
+         custom_mapping = {'Arch1' : 0, 'Arch4' : 1, 'Arch2' : 1, 'Arch3' : 0}
       
          
       ydata_num = ydata.map(custom_mapping)
@@ -217,7 +216,7 @@ class treat_data_personality:
      output_data: Fscore for each shuffle
      '''
     def  add_shuffling(self,X, y, sorted_labels,normalization, model, hormones,information_data):
-           n_iterations = 2 #was 1000
+           n_iterations = 500 #was 1000
            permutations = set()
            # Create a generator with a fixed seed assure different permutation each time
            rng = np.random.default_rng(42)
@@ -247,7 +246,7 @@ class treat_data_personality:
     def __call__(self,model = None,normalization = None,n_repeats = None, sex = None, hormones = None): 
         
          #add ratios if there are
-        # self.data = treat_data_personality.addRatios(self.data,hormones)
+         self.data = treat_data_personality.addRatios(self.data,hormones)
          
         #  #select data to work with
          X , y , information_data, sorted_labels = self.select_data(sex, hormones)

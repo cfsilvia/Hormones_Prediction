@@ -119,17 +119,22 @@ class plot_pca:
         norms = np.linalg.norm(L, axis =1) #computes the euclidean distance of each row from the zero
         max_norm = norms.max() if norms.max() != 0 else 1.0
         scale = max_range*0.8 / max_norm #keep arrows inside the plot
+        df = pd.DataFrame(columns = ['feature', 'PC1', 'PC2', 'PC3', 'distance'])
 
         for idx, (feature_name, row) in enumerate(loadings.iterrows()):
          # if norms[idx] > 0.3: 
            x,y,z =row["PC1"], row["PC2"], row["PC3"]
            x,y,z = x*scale, y*scale, z*scale
-
+           df.loc[idx, 'feature'] = feature_name
+           df.loc[idx,'PC1'] = x
+           df.loc[idx,'PC2'] = y
+           df.loc[idx,'PC3'] = z
+           df.loc[idx,'distance'] = np.sqrt(x**2 + y**2 + z**2)
            #arrow from origin
            ax.quiver(0, 0, 0, x, y, z, arrow_length_ratio = 0.1, linewidth = 1.0, color ="black", linestyle = "--")
            #label near the arrow
            ax.text(x * 1.05, y* 1.05, z*1.05, feature_name, fontsize = 7)
-
+        df.to_excel(self.output_dir + 'arrows.xlsx')
 #_____________________________
     def __call__(self):
       out, var, loadings = self.get_pca_components()

@@ -160,10 +160,12 @@ class plot_data_hierarchy:
         
         
         if sex == "male":
-            color = "mediumaquamarine"
+            colord = "mediumaquamarine"
+            colors = "aquamarine"
             edgecolor = "darkgreen"
         else:
-            color = "mediumpurple"
+            colord = "mediumpurple"
+            colors = "blueviolet"
             edgecolor = "indigo"
         
         for i, hormone in enumerate(hormones):
@@ -172,11 +174,11 @@ class plot_data_hierarchy:
           dom_x = np.full(len(dom_vals), x[i]- bar_width/2) + rng.normal(0, jitter_strength, size=len(dom_vals))
           sub_x= np.full(len(sub_vals), x[i]+bar_width/2) + rng.normal(0, jitter_strength, size=len(sub_vals))
           ax.scatter(dom_x, dom_vals,
-                    facecolors=color, edgecolors=edgecolor,
+                    facecolors=colord, edgecolors=edgecolor,
                     alpha=0.7, s=9, linewidths=1.2, zorder=2)
     
           ax.scatter(sub_x, sub_vals,
-                     facecolors=color, edgecolors=edgecolor,
+                     facecolors=colors, edgecolors=edgecolor,
                      alpha=0.6, s=9, linewidths=1.2, zorder=2)
    
     def normalize_data(self,data):
@@ -186,7 +188,7 @@ class plot_data_hierarchy:
     
     def plot_bar_plots_all(self,data_male, data_female, hormones,results_male, results_female):
        #fig, (ax_f, ax_m) = plt.subplots(2, 1, figsize=(15, 8),sharex=True, gridspec_kw={'height_ratios': [1, 1], 'hspace': 0.01})
-       fig, (ax_f, ax_m) = plt.subplots(2, 1, figsize=(20, 8),sharex=True, gridspec_kw={'height_ratios': [1, 1], 'hspace': 0.01})
+       fig, (ax_f, ax_m) = plt.subplots(2, 1, figsize=(20, 8),sharex=True, gridspec_kw={'height_ratios': [1, 1], 'hspace': 0.1})
 
        #female panel
        self.plot_bar_plots(data_female,results_female,hormones,'female',ax_f)
@@ -200,7 +202,7 @@ class plot_data_hierarchy:
        
 
 
-       plt.savefig("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/Difference_dom_sub_significant_biomarkers_vs1_fonts" + ".pdf", bbox_inches="tight")
+       plt.savefig("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/Difference_dom_sub_all_biomarkers_vs1_fonts" + ".pdf", bbox_inches="tight")
        
        plt.show()
 
@@ -283,7 +285,7 @@ class plot_data_hierarchy:
 
         hormones_to_consider = [h for h in hormones_to_consider_main if h not in hormones_to_consider1]
 
-        self.plot_bar_plots_all(data_male_normalized, data_female_normalized, hormones_to_consider1,results_male, results_female)
+        self.plot_bar_plots_all(data_male_normalized, data_female_normalized, hormones_to_consider,results_male, results_female)
 
         # #correction
         # results_male["p_value"] = results_male_wn["p_value"]

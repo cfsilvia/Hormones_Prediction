@@ -151,6 +151,13 @@ class get_data_interaction:
          corr, pval = self._pairwise_corr_pvals(auxiliary) 
          self.corr_reordered = corr
          self.pval_reordered = pval
+
+         output = f"U:/Users/Silvia/RutiFrishman_2025_hormones_paper/{self.sex}_correlation_heatmap.xlsx"
+            
          
+         with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            self.corr_reordered.to_excel(writer, sheet_name="correlation", index=False)
+            self.pval_reordered.to_excel(writer, sheet_name="pvalue_correction", index=False)
+
          self.plot_heatmap()
        

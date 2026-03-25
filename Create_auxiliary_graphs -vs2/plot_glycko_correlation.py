@@ -44,85 +44,107 @@ class plot_glycko_correlation:
         return df
             
     def plot_data(self,compounds):
-        size_min=30
-        size_max=400    
+        size_min=15
+        size_max=200    
         df = self.results_to_plot.copy()
-        col_order = ["male", "female"]
-        df["Compounds"] = pd.Categorical(df["Compounds"], categories = compounds)
-        df["sex"] = pd.Categorical(df["sex"], categories = col_order  )
+        
+        #order the compounds according male correlation
+        compounds = (df[df['sex'] == 'male'].sort_values('correlation', ascending=False)['Compounds']).tolist()
+
+        row_order = ["male", "female"]
+        df["Compounds"] = pd.Categorical(df["Compounds"], categories = compounds,ordered = True )
+        df["sex"] = pd.Categorical(df["sex"], categories = row_order  )
         
         # sizes
         max_abs = df['correlation'].abs().max()
         sizes = size_min + (size_max - size_min) * (df['correlation'].abs() / max_abs)
         df['size'] = sizes
         #colors
-        base_colors = np.where(df['correlation'] >= 0, 'tab:red', 'tab:blue')
+        df["color"] = np.where(df['correlation'] >= 0, 'tab:red', 'tab:blue')
         # alpha from p-value (smaller p → more opaque)
-        alpha = 1 - np.sqrt(df['pvalue'].values)
-        alpha = np.clip(alpha, 0.2, 1.0)
-        df['rgba'] = [to_rgba(c, a) for c, a in zip(base_colors, alpha)]
+        # alpha = 1 - np.sqrt(df['pvalue'].values)
+        # alpha = np.clip(alpha, 0.2, 1.0)
+        # df['rgba'] = [to_rgba(c, a) for c, a in zip(base_colors, alpha)]
         #x and y
-        row_order = compounds
-        row_index = {r:i for i, r in enumerate(row_order)}
+        col_order = compounds
+
+        #order compounds according to correlation of males 
+
+
         col_index = {c:i for i, c in enumerate(col_order)}
-        x = df['sex'].map(col_index).astype(float).values
-        y = df["Compounds"].map(row_index).astype(float).values
+        row_index = {r:i for i, r in enumerate(row_order)}
+        y = df['sex'].map(row_index).astype(float).values
+        x = df["Compounds"].map(col_index).astype(float).values
         
         # --- 4) Plot
-        fig_h = max(4, 0.35 * len(row_order))
-        fig_w = max(4, 1.2 * len(col_order))
+        fig_h = max(4, 0.03 * len(row_order))
+        fig_w = max(4, 0.3 * len(col_order))
         fig, ax = plt.subplots(figsize=(fig_w, fig_h))
         
-        ax.scatter(x, y, s=df['size'].values, c=list(df['rgba']), edgecolor='k', linewidths=0.5)
+        ax.scatter(x, y, s=df['size'].values, c=df['color'].values, edgecolor='k', linewidths=0.5, alpha=0.7)
         
         for (xi, yi, p, sz) in zip(x, y, df['pvalue'].values, df['size'].values):
           stars = plot_glycko_correlation.p_to_stars(p)  
           if stars:
-              fs = max(7, min(14, 6 + 0.02 * np.sqrt(sz)))
+              #fs = max(12, min(14, 6 + 0.02 * np.sqrt(sz)))
+              fs = 10
               ax.text(xi, yi, stars, ha='center', va='center',
               color='black', fontweight='bold', fontsize=fs, clip_on=True)
               
   
-         # Axis ticks & labels
+        #  # Axis ticks & labels
         ax.set_xticks(range(len(col_order)))
-        ax.set_xticklabels(col_order)
+        ax.set_xticklabels(col_order,rotation=90, ha='center', fontsize=7)
         ax.set_yticks(range(len(row_order)))
         ax.set_yticklabels(row_order)
         ax.set_xlim(-0.5, len(col_order)-0.5)
         ax.set_ylim(-0.5, len(row_order)-0.5)
         
-        ax.set_title('Correlation with glycko last day heatmap')
-        ax.grid(axis='x', linestyle=':', alpha=0.3)
-        ax.grid(axis='y', linestyle=':', alpha=0.3)
-        ax.invert_yaxis()
+
+        # Remove top and right border
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        # Make sure left and bottom stay visible
+        ax.spines['left'].set_visible(True)
+        ax.spines['bottom'].set_visible(True)
+
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+
+
+        # ax.set_title('Correlation with glycko last day heatmap')
+        # ax.grid(axis='x', linestyle=':', alpha=0.3)
+        # ax.grid(axis='y', linestyle=':', alpha=0.3)
+        # ax.invert_yaxis()
         
-        ##################
-        # --- Legends: color (sign) ---
+        # ##################
+        # # --- Legends: color (sign) ---
         sign_handles = [
-            Patch(facecolor='tab:red', edgecolor='k', label='Positive corr'),
+            Patch(facecolor='tab:red', edgecolor='k', label='Positive corr', alpha = 0.7),
             Patch(facecolor='tab:blue', edgecolor='k', label='Negative corr')
         ]
-        leg_sign = ax.legend(handles=sign_handles, title='', loc='lower left', bbox_to_anchor=(1.05, 0.8), prop={'size': 8},  frameon=True)
+        leg_sign = ax.legend(handles=sign_handles, title='', loc='upper right', bbox_to_anchor=(0.35, -0.7), ncol=2, prop={'size': 8},  frameon=False)
 
         # --- Legend: size (|correlation|) ---
         # choose a few representative |r| values (adjust if you prefer)
-        # rep_abs_r = np.array([0.2, 0.5, 0.8]) * max_abs if max_abs > 0 else np.array([0.0])
-        # rep_sizes = size_min + (size_max - size_min) * (rep_abs_r / max_abs if max_abs > 0 else 0)
+        rep_abs_r = np.array([0.2, 0.5, 0.8]) * max_abs if max_abs > 0 else np.array([0.0])
+        rep_sizes = size_min + (size_max - size_min) * (rep_abs_r / max_abs if max_abs > 0 else 0)
 
-        # size_handles = [ax.scatter([], [], s=s, edgecolor='k', facecolor='none') for s in rep_sizes]
-        # size_labels = [f'|r|={v/max_abs:.1f}' if max_abs > 0 else '|r|=0.0' for v in rep_abs_r]
+        size_handles = [ax.scatter([], [], s=s, edgecolor='k', facecolor='none') for s in rep_sizes]
+        size_labels = [f'|r|={v/max_abs:.1f}' if max_abs > 0 else '|r|=0.0' for v in rep_abs_r]
 
-        # leg_size = ax.legend(size_handles, size_labels, title='Effect size', loc='lower right', scatterpoints=1, frameon=True)
-        # ax.add_artist(leg_sign)  # keep both legends
+        leg_size = ax.legend(size_handles, size_labels, title='', loc="upper right",  bbox_to_anchor=(0.8, -0.6), ncol =3, scatterpoints=1, frameon=False,  prop={"size": 8},labelspacing=1.8,borderpad=1.2, handletextpad=1.5  )
+        ax.add_artist(leg_sign)  # keep both legends
 
-        # --- Colorbar: p-value (opacity) ---
-        # Your plot uses alpha = 1 - sqrt(p). We can show a p-value scale; lower p = darker bar.
-        norm = Normalize(vmin=0.0, vmax=1.0)  # p-value in [0,1]
-        sm = ScalarMappable(norm=norm, cmap='Greys_r')
-        sm.set_array([])  # required for older Matplotlibs
-        cbar = fig.colorbar(sm, ax=ax, pad=0.02, shrink=0.5, aspect=40)
-        cbar.set_label('p-value ')
-        ##########################       
+        # # --- Colorbar: p-value (opacity) ---
+        # # Your plot uses alpha = 1 - sqrt(p). We can show a p-value scale; lower p = darker bar.
+        # # norm = Normalize(vmin=0.0, vmax=1.0)  # p-value in [0,1]
+        # # sm = ScalarMappable(norm=norm, cmap='Greys_r')
+        # # sm.set_array([])  # required for older Matplotlibs
+        # # cbar = fig.colorbar(sm, ax=ax, pad=0.02, shrink=0.5, aspect=40)
+        # # cbar.set_label('p-value ')
+        # ##########################       
         
         
         
@@ -131,7 +153,7 @@ class plot_glycko_correlation:
         
         
         plt.tight_layout()
-        plt.savefig("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/correl_glycko_vs_compound_fonts.pdf", bbox_inches="tight")
+        plt.savefig("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/correl_glycko_vs_compound_2026.pdf", bbox_inches="tight")
         plt.close()
 
 

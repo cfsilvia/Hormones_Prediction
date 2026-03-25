@@ -9,9 +9,9 @@ from plot_data_abs_F_M import plot_data_abs_F_M
 def main():
  #setting 
  path_file = r"U:\Users\Silvia\RutiFrishman_2025_hormones_paper\data_to_use\data_to_use_complete_without_final.xlsx" 
- output_dir = r"U:\Users\Silvia\RutiFrishman_2025_hormones_paper\Graphs\Figure2\\"
+ output_dir = r"U:\Users\Silvia\RutiFrishman_2025_hormones_paper\Graphs\\"
  choice = 1
- value_plot = 3
+ value_plot = 1
 
  match choice:
     case 1:
@@ -46,6 +46,8 @@ def main():
                 obj_plot =  plot_data(total_data)
                 obj_plot(hormones, end_cann, 
                                     aminoacids,hormones_ratio, end_cann_ratio, aminoacids_ratio)
+                obj_plot(hormones, end_cann, 
+                                    aminoacids,[], [], [])
                 # select compounds without ratios
                 compounds = ['sex'] + hormones + end_cann + aminoacids
                 total_data_interaction = total_data.copy()
@@ -75,7 +77,9 @@ def main():
            case 2:#plot relative
              obj_plot_abs =  plot_data_abs_F_M( output_dir,total_data)
              obj_plot_abs(hormones, end_cann, 
-                                    aminoacids,hormones_ratio, end_cann_ratio, aminoacids_ratio) 
+                                    aminoacids,[], [], []) 
+          #    obj_plot_abs(hormones, end_cann, 
+          #                           aminoacids,hormones_ratio, end_cann_ratio, aminoacids_ratio) 
                 
               
         
