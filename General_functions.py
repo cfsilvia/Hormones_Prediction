@@ -29,7 +29,7 @@ class General_functions:
         # Define features and targets based on the structure used in treat_continous_labels
         X = data.drop(
             ['Experiment','sex','Type','Genotype','Hierarchy','Mice.chips',
-             'Last.day.Glicko','Animal','Arch1','Arch2','Arch3','Arch4'], axis=1)
+             'Last.day.Glicko','Animal','sexFeature','Arch1','Arch2','Arch3','Arch4'], axis=1)
         y = data[['Arch1','Arch2','Arch3','Arch4']]
 
         correlations = []

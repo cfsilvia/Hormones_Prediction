@@ -4,6 +4,7 @@ from scipy.optimize import nnls
 from scipy.optimize import lsq_linear
 from scipy.optimize import linear_sum_assignment
 import os
+from scipy.optimize import minimize
 
 class create_personality:
     def __init__(self,file_pareto,output_dir, hormones_file):
@@ -22,13 +23,23 @@ class create_personality:
         vectArch_rows = self.Arch_comp.to_numpy()
         vectArch =vectArch_rows.T # transpose to shape(3,4)
         #create weights for each data
-        W = create_personality.compute_barycentric_coords(vectData, vectArch_rows)
+       # W = create_personality.compute_barycentric_coords(vectData, vectArch_rows)
+        W = create_personality.compute_weights_selective_qp(vectData, vectArch_rows, tol=1e-10)
         #create dataframe and save with data information
         result, df = self.save_data(W)
         #do assignment according hungarian algorithm
         # df_assignment= self.hungarian_assignment(df)
         # #do assignment by taking acount the sex
         # df_assignment_Sex = self.hungarian_assignment_sex(result_arch,df)
+
+        #check negative W
+       # negative_count = 0  # <-- counter
+
+        # for w in W:
+        #     if np.any(w < 0):
+        #         negative_count += 1  # <-- increment
+        # print(f"Number of points with negative weights: {negative_count}")
+        # return negative_count
 
         # result = pd.concat([self.SexTypeRank, df_assignment,df_assignment_Sex[df_assignment_Sex.columns[-1]]], axis=1)
         # result.to_excel(self.output_dir + 'assignment.xlsx', index=False)
@@ -53,7 +64,7 @@ class create_personality:
         result = pd.concat([self.SexTypeRank, df], axis=1)
        
         
-        self.save_to_excel(result,(self.output_dir + 'weights_for_each_archetype.xlsx'), 'raw_data')
+        self.save_to_excel(result,(self.output_dir + 'weights_for_each_archetype_exact_simplex_formula.xlsx'), 'raw_data')
        
         return result, df
     
@@ -206,11 +217,22 @@ class create_personality:
          for i, x in enumerate(X):  
              x_aug = np.append(x, 1)  # shape (4,)
              w = np.linalg.solve(A_aug, x_aug)
+             #Project onto simples
+            # w = create_personality.project_to_simplex(w)  
+
              W[i] = w
 
          return W
 
-   
+    def project_to_simplex(v):
+        """Project vector v onto probability simplex"""
+        u = np.sort(v)[::-1]
+        cssv = np.cumsum(u)
+        rho = np.where(u * np.arange(1, len(v)+1) > (cssv - 1))[0][-1]
+        theta = (cssv[rho] - 1) / (rho + 1)
+        return np.maximum(v - theta, 0)
+
+
     '''
     auxiliary function for equally distribution
     '''
@@ -220,4 +242,56 @@ class create_personality:
        return [base + (1 if i < remainder else 0) for i in range(groups)]
     
 
+    '''
+    find exact solution
+    '''
+    def barycentric_solve(x, A):
+       A_aug = np.vstack([A.T, np.ones(A.shape[0])])
+       x_aug = np.append(x, 1)
+       return np.linalg.solve(A_aug, x_aug)
     
+
+    def qp_project(x, A):
+        K = A.shape[0]
+
+        def loss(w):
+            diff = x - w @ A
+            return diff @ diff
+
+        constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
+        bounds = [(0.0, 1.0)] * K
+        w0 = np.ones(K) / K
+
+        res = minimize(loss, w0, method='SLSQP',
+                    bounds=bounds, constraints=constraints)
+
+        return res.x
+    
+
+ 
+
+
+    def compute_weights_selective_qp(X, A, tol=1e-10):
+        """
+        Use barycentric solution.
+        Apply QP only if negative weights appear.
+        """
+        N = X.shape[0]
+        K = A.shape[0]
+        W = np.zeros((N, K))
+
+        negative_count = 0  # <-- counter
+
+        for i, x in enumerate(X):
+            w = create_personality.barycentric_solve(x, A)
+
+            #  Only fix if negative weights exist
+            if np.any(w < -tol):
+                negative_count += 1  # <-- increment
+                W[i] = create_personality.qp_project(x, A)
+            else:
+                # keep original (clean numerical noise)
+                w[w < 0] = 0
+                W[i] = w / np.sum(w)
+        print(f"Number of points with negative weights: {negative_count}")
+        return W

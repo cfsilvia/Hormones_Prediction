@@ -41,7 +41,7 @@ class treat_continous_labels:
         X, y, feature_names, metadata = self.load_data()
 
 
-        y_true, y_pred, rmse = self.loocv_pipeline(X, y)
+        y_true, y_pred, rmse, cosine_sim, kl_div, ent = self.loocv_pipeline(X, y)
         self.confusion_matrix(y_true, y_pred)
         self.save_predictions(y_true, y_pred)
         self.plot_prediction_score(y_true, y_pred)  
@@ -49,10 +49,16 @@ class treat_continous_labels:
         self.evaluate_probabilistic_predictions(y_true, y_pred) 
         self.scatter_plot(y_true, y_pred)
 
+        (
+            original_rmse, permuted_rmses, p_value_rmse, 
+            original_cosine,permutated_cosines, p_value_cosine,
+            original_kl,permutated_kls, p_value_kl,
+            original_ent,permutated_ents, p_value_ent) = self.permutation_test(X, y)
 
-       # original_rmse, permuted_rmses, p_values = self.permutation_test(X, y)
-
-        #self.plot_permutation_test_results(permuted_rmses, original_rmse, p_values, self.output_dir)
+        self.plot_permutation_test_results(permuted_rmses, original_rmse, p_value_rmse)
+        self.plot_permutation_test_results_cosine(permutated_cosines, original_cosine, p_value_cosine)
+        self.plot_permutation_test_results_kl(permutated_kls, original_kl, p_value_kl) 
+        self.plot_permutation_test_results_entropy(permutated_ents, original_ent, p_value_ent)
 
         shap_results, X_scaled_df =self.shap_values(X, y, feature_names, metadata)
         self.save_shap_values(shap_results, feature_names)
@@ -170,7 +176,7 @@ class treat_continous_labels:
 
              #preds = softmax(preds, axis=1)
             # ensure positive
-            preds = np.clip(preds, 1e-8, None)
+            preds = np.clip(preds, 0, None)
             # normalize to sum to 1
             preds = preds / preds.sum(axis=1, keepdims=True)
 
@@ -188,11 +194,12 @@ class treat_continous_labels:
 
         rmse = np.sqrt(mean_squared_error(y_true, y_pred))
         print(f"RMSE: {rmse}")
-
+        cosine_sim, kl_div, ent = self.evaluate_probabilistic_predictions(y_true, y_pred, plot = False)
         #print("Mean alpha:", np.mean(alphas_used))
 
 
-        return y_true, y_pred, rmse
+        return y_true, y_pred, rmse, cosine_sim, kl_div, ent
+
     
     ##################calculate r square###################
     def rsquare(self, y_true, y_pred):
@@ -223,31 +230,46 @@ class treat_continous_labels:
 
     def permutation_test(self, X, y, n_permutations=200):
 
-        original_rmse = self.loocv_pipeline(X, y)[2]
+        original_rmse, original_cosine, original_kl, original_ent= self.loocv_pipeline(X, y)[2:6]
 
         permuted_rmses = []
+        permutated_cosines = []
+        permutated_kls = []
+        permutated_ents = []    
 
         for i in range(n_permutations):
             y_permuted = np.random.permutation(y)
-            permuted_rmse = self.loocv_pipeline(X, y_permuted)[2]
+            permuted_rmse, cosine_sim, kl_div, ent= self.loocv_pipeline(X, y_permuted)[2:6]
             permuted_rmses.append(permuted_rmse)
+            permutated_cosines.append(cosine_sim)
+            permutated_kls.append(kl_div)
+            permutated_ents.append(ent)
+
             print(f"Permutation Test Progress: {i+1}/{n_permutations}")
 
 
+        p_value_rmse = np.mean(permuted_rmses <= original_rmse)
+        p_value_cosine = np.mean(permutated_cosines >= original_cosine)
+        p_value_kl = np.mean(permutated_kls <= original_kl)
+        p_value_ent = np.mean(permutated_ents <= original_ent)
 
-        p_value = np.mean(permuted_rmses <= original_rmse)
+        return (
+            original_rmse, permuted_rmses, p_value_rmse, 
+        original_cosine,permutated_cosines, p_value_cosine,
+        original_kl,permutated_kls, p_value_kl,
+        original_ent,permutated_ents, p_value_ent
+        )
 
-        return original_rmse, permuted_rmses, p_value
     
     #Plotting function for permutation test results
-    def plot_permutation_test_results(self, permuted_rmses, original_rmse, p_value, output_dir):
+    def plot_permutation_test_results(self, permuted_rmses, original_rmse, p_value_rmse):
 
         plt.hist(permuted_rmses, bins=20, alpha=0.7, color='blue', label='Permuted RMSEs')
         plt.axvline(original_rmse, color='red', linestyle='dashed', linewidth=2, label=f'Original RMSE: {original_rmse:.4f}')
         if self.sex is not None:
-            plt.title(f'Permutation Test Results for {self.sex}\np-value: {p_value:.4f}')
+            plt.title(f'Permutation Test Results for {self.sex}\np-value: {p_value_rmse:.4f}')
         else:
-            plt.title(f'Permutation Test Results\np-value: {p_value:.4f}')
+            plt.title(f'Permutation Test Results\np-value: {p_value_rmse :.4f}')
         plt.xlabel('RMSE')
         plt.ylabel('Frequency')
         plt.legend()
@@ -256,8 +278,61 @@ class treat_continous_labels:
         else:
             plt.savefig(self.output_dir + 'permutation_test_results.pdf')
        # plt.show()
-   
+    
 
+     #Plotting function for permutation test results cosine
+    def plot_permutation_test_results_cosine(self, permutated_cosines, original_cosine, p_value_cosine):
+        plt.figure()
+        plt.hist(permutated_cosines, bins=20, alpha=0.7, color='blue', label='Permuted cosine similarity')
+        plt.axvline(original_cosine, color='red', linestyle='dashed', linewidth=2, label=f'Original cosine: {original_cosine:.4f}')
+        if self.sex is not None:
+            plt.title(f'Permutation Test Results for {self.sex}\np-value: {p_value_cosine:.4f}')
+        else:
+            plt.title(f'Permutation Test Results\np-value: {p_value_cosine:.4f}')
+        plt.xlabel('cosine similarity')
+        plt.ylabel('Frequency')
+        plt.legend()
+        if self.sex is not None:
+            plt.savefig(self.output_dir + 'permutation_test_results_cosine_' + self.sex + '.pdf')
+        else:
+            plt.savefig(self.output_dir + 'permutation_test_results_cosine_.pdf')
+
+
+     #Plotting function for permutation test results
+    def plot_permutation_test_results_kl(self, permutated_kls, original_kl, p_value_kl):
+        plt.figure()
+        plt.hist(permutated_kls, bins=20, alpha=0.7, color='blue', label='Permuted kl divergence')
+        plt.axvline(original_kl, color='red', linestyle='dashed', linewidth=2, label=f'Original kl: {original_kl:.4f}')
+        if self.sex is not None:
+            plt.title(f'Permutation Test Results for {self.sex}\np-value: {p_value_kl:.4f}')
+        else:
+            plt.title(f'Permutation Test Results\np-value: {p_value_kl:.4f}')
+        plt.xlabel('kl divergence')
+        plt.ylabel('Frequency')
+        plt.legend()
+        if self.sex is not None:
+            plt.savefig(self.output_dir + 'permutation_test_results_kl_' + self.sex + '.pdf')
+        else:
+            plt.savefig(self.output_dir + 'permutation_test_results_kl_.pdf')
+
+
+    #Plotting function for permutation test results
+    def plot_permutation_test_results_entropy(self, permutated_ents, original_ent, p_value_ent):
+        plt.figure()
+        plt.hist(permutated_ents, bins=20, alpha=0.7, color='blue', label='Permuted entropy')
+        plt.axvline(original_ent, color='red', linestyle='dashed', linewidth=2, label=f'Original entropy: {original_ent:.4f}')
+        if self.sex is not None:
+            plt.title(f'Permutation Test Results for {self.sex}\np-value: {p_value_ent:.4f}')
+        else:
+            plt.title(f'Permutation Test Results\np-value: {p_value_ent:.4f}')
+        plt.xlabel('entropy')
+        plt.ylabel('Frequency')
+        plt.legend()
+        if self.sex is not None:
+            plt.savefig(self.output_dir + 'permutation_test_results_entropy_' + self.sex + '.pdf')
+        else:
+            plt.savefig(self.output_dir + 'permutation_test_results_entropy_.pdf')
+    
 
     ################ SHAP on the full dataset ################
 
@@ -588,7 +663,7 @@ class treat_continous_labels:
     '''
      cosine similarity
   '''
-    def evaluate_probabilistic_predictions(self, y_true, y_pred):
+    def evaluate_probabilistic_predictions(self, y_true, y_pred, plot = True):
         eps = 1e-10
         y_true_safe = np.clip(y_true, eps, 1) #try to avoid 0 prediction which can give problems with log operations
         y_pred_safe = np.clip(y_pred, eps, 1)
@@ -596,34 +671,33 @@ class treat_continous_labels:
         cosine_sim = [1 - cosine(t, p) for t, p in zip(y_true, y_pred)]
         kl_div = np.sum(rel_entr(y_true_safe, y_pred_safe), axis=1)
         ent = entropy(y_pred.T)
-
-         # ----- Create figure -----
-        fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-
-        # ---- Cosine similarity ----
-        axes[0].hist(cosine_sim, bins=20)
-        axes[0].set_title(f"Cosine Similarity\nMean = {np.mean(cosine_sim):.3f}")
-        axes[0].set_xlabel("Similarity")
-        axes[0].set_ylabel("Count")
-
-         # ---- KL divergence ----
-        axes[1].hist(kl_div, bins=20)
-        axes[1].set_title(f"KL Divergence\nMean = {np.mean(kl_div):.3f}")
-        axes[1].set_xlabel("KL divergence")
         
-         # ---- Entropy ----
-        axes[2].hist(ent, bins=20)
-        axes[2].set_title(f"Prediction Entropy\nMean = {np.mean(ent):.3f}")
-        axes[2].set_xlabel("Entropy")
+        if plot:
+            # ----- Create figure -----
+            fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+            # ---- Cosine similarity ----
+            axes[0].hist(cosine_sim, bins=20)
+            axes[0].set_title(f"Cosine Similarity\nMedian = {np.median(cosine_sim):.3f}")
+            axes[0].set_xlabel("Similarity")
+            axes[0].set_ylabel("Count")
+
+            # ---- KL divergence ----
+            axes[1].hist(kl_div, bins=20)
+            axes[1].set_title(f"KL Divergence\nMedian = {np.median(kl_div):.3f}")
+            axes[1].set_xlabel("KL divergence")
+            
+            # ---- Entropy ----
+            axes[2].hist(ent, bins=20)
+            axes[2].set_title(f"Prediction Entropy\nMedian = {np.median(ent):.3f}")
+            axes[2].set_xlabel("Entropy")
 
 
+            plt.tight_layout()
+            plt.savefig(os.path.join(self.output_dir, "probabilistic_evaluation.pdf"))
+            plt.close()
 
-
-
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(self.output_dir, "probabilistic_evaluation.pdf"))
-        plt.close()
+        return np.median(cosine_sim), np.median(kl_div), np.median(ent)  
 
 
 
