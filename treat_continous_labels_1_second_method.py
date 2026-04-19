@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import shap
 from scipy.stats import pearsonr
 
-from sklearn.model_selection import LeaveOneOut
+from sklearn.model_selection import KFold, GroupKFold, LeaveOneOut
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import RidgeCV
 from sklearn.multioutput import MultiOutputRegressor
@@ -43,7 +43,7 @@ class treat_continous_labels_second_method:
         X, y, feature_names, metadata = self.load_data()
 
 
-        y_true, y_pred, rmse, cosine_sim, kl_div, ent = self.loocv_pipeline(X, y)
+        y_true, y_pred, rmse, cosine_sim, kl_div, ent = self.cv_pipeline(X, y)
 
         
 
@@ -145,9 +145,10 @@ class treat_continous_labels_second_method:
 
     ################ LOOCV ################
 
-    def loocv_pipeline(self, X, y):
+    def cv_pipeline(self, X, y):
 
-        loo = LeaveOneOut()
+        cv = KFold(n_splits=5, shuffle=True, random_state=42)
+        splits = cv.split(X)
 
         y_true = []
         y_pred = []
@@ -164,7 +165,7 @@ class treat_continous_labels_second_method:
         index = 0
         # alphas_used = []
 
-        for train_idx, test_idx in loo.split(X):
+        for train_idx, test_idx in splits:
 
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
@@ -274,7 +275,7 @@ class treat_continous_labels_second_method:
 
     def permutation_test(self, X, y, n_permutations=200):
 
-        original_rmse, original_cosine, original_kl, original_ent= self.loocv_pipeline(X, y)[2:6]
+        original_rmse, original_cosine, original_kl, original_ent= self.cv_pipeline(X, y)[2:6]
 
         permuted_rmses = []
         permutated_cosines = []
@@ -283,7 +284,7 @@ class treat_continous_labels_second_method:
 
         for i in range(n_permutations):
             y_permuted = np.random.permutation(y)
-            permuted_rmse, cosine_sim, kl_div, ent= self.loocv_pipeline(X, y_permuted)[2:6]
+            permuted_rmse, cosine_sim, kl_div, ent= self.cv_pipeline(X, y_permuted)[2:6]
             permuted_rmses.append(permuted_rmse)
             permutated_cosines.append(cosine_sim)
             permutated_kls.append(kl_div)
