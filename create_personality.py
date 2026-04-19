@@ -295,3 +295,11 @@ class create_personality:
                 W[i] = w / np.sum(w)
         print(f"Number of points with negative weights: {negative_count}")
         return W
+    
+    #Add hormones status from external file
+    def add_status_to_hormones_from_external_file(self, external_file):
+        #select given data
+        selected_data = pd.read_excel(external_file)
+        merged = pd.merge(self.hormones_data, selected_data, on=['Experiment',  'sex', 'Type',  'Genotype',  'Hierarchy'], how='left')
+        merged.to_excel(self.output_dir + 'data_for_model_with_biomarkers.xlsx', index=False)
+        return merged 

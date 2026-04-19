@@ -27,7 +27,7 @@ from scipy.spatial.distance import jensenshannon
 
 
 
-class treat_continous_labels:
+class treat_continous_labels_second_method:
 
     def __init__(self, data, output_dir, run_features_normalization, run_model, compare_with_baseline = None, sex=None):
         self.data = data
@@ -47,30 +47,30 @@ class treat_continous_labels:
 
         
 
-        # self.confusion_matrix(y_true, y_pred)
-        # self.save_predictions(y_true, y_pred)
-        # self.plot_prediction_score(y_true, y_pred)  
-        # self.rsquare( y_true, y_pred)
-        # self.evaluate_probabilistic_predictions(y_true, y_pred) 
-        # self.scatter_plot(y_true, y_pred)
+        self.confusion_matrix(y_true, y_pred)
+        self.save_predictions(y_true, y_pred)
+        self.plot_prediction_score(y_true, y_pred)  
+        self.rsquare( y_true, y_pred)
+        self.evaluate_probabilistic_predictions(y_true, y_pred) 
+        self.scatter_plot(y_true, y_pred)
 
-        # (
-        #     original_rmse, permuted_rmses, p_value_rmse, 
-        #     original_cosine,permutated_cosines, p_value_cosine,
-        #     original_kl,permutated_kls, p_value_kl,
-        #     original_ent,permutated_ents, p_value_ent) = self.permutation_test(X, y)
+        (
+            original_rmse, permuted_rmses, p_value_rmse, 
+            original_cosine,permutated_cosines, p_value_cosine,
+            original_kl,permutated_kls, p_value_kl,
+            original_ent,permutated_ents, p_value_ent) = self.permutation_test(X, y)
 
-        # self.plot_permutation_test_results(permuted_rmses, original_rmse, p_value_rmse)
-        # self.plot_permutation_test_results_cosine(permutated_cosines, original_cosine, p_value_cosine)
-        # self.plot_permutation_test_results_kl(permutated_kls, original_kl, p_value_kl) 
-        # self.plot_permutation_test_results_entropy(permutated_ents, original_ent, p_value_ent)
+        self.plot_permutation_test_results(permuted_rmses, original_rmse, p_value_rmse)
+        self.plot_permutation_test_results_cosine(permutated_cosines, original_cosine, p_value_cosine)
+        self.plot_permutation_test_results_kl(permutated_kls, original_kl, p_value_kl) 
+        self.plot_permutation_test_results_entropy(permutated_ents, original_ent, p_value_ent)
 
-        # shap_results, X_scaled_df =self.shap_values(X, y, feature_names, metadata)
-        # self.save_shap_values(shap_results, feature_names)
-        # self.bar_map_plot(shap_results, feature_names)
-        # self.summary_plot(shap_results, X_scaled_df, feature_names)
+        shap_results, X_scaled_df =self.shap_values(X, y, feature_names, metadata)
+        self.save_shap_values(shap_results, feature_names)
+        self.bar_map_plot(shap_results, feature_names)
+        self.summary_plot(shap_results, X_scaled_df, feature_names)
         
-        # self.plot_violin_shap_values(X_scaled_df, feature_names, metadata)
+        self.plot_violin_shap_values(X_scaled_df, feature_names, metadata)
 
 
 
@@ -94,13 +94,13 @@ class treat_continous_labels:
         if self.sex  is not None:
            X = data.drop(
             ['Experiment','sex','Type','Genotype','Hierarchy','Mice.chips',
-             'Last.day.Glicko','Animal', 'sexFeature','Arch1','Arch2','Arch3','Arch4'], axis=1)
+             'Last.day.Glicko','Animal', 'sexFeature','Arch1','Arch2','Arch3'], axis=1)
         else: 
            X = data.drop(
             ['Experiment','sex','Type','Genotype','Hierarchy','Mice.chips',
-             'Last.day.Glicko','Animal','sexFeature', 'Arch1','Arch2','Arch3','Arch4'], axis=1)
+             'Last.day.Glicko','Animal','sexFeature', 'Arch1','Arch2','Arch3'], axis=1)
 
-        y = data[['Arch1','Arch2','Arch3','Arch4']]
+        y = data[['Arch1','Arch2','Arch3']]
 
         feature_names = X.columns.tolist()
 
@@ -112,9 +112,22 @@ class treat_continous_labels:
 
     def build_model(self):
         #alpha 0.5 1
-        models = {'linear' :  MultiOutputRegressor(Ridge(alpha= 1)), 'tree': RandomForestRegressor(n_estimators=50, max_depth=5, n_jobs=-1, random_state=42)}
+        models = {'linear' :  MultiOutputRegressor(Ridge(alpha= 1)), 'tree': RandomForestRegressor(n_estimators=200,  max_depth=None, max_features="sqrt",  min_samples_leaf=2, n_jobs=-1, random_state=42),
+                  'xgb': MultiOutputRegressor(
+            XGBRegressor(
+                n_estimators=200,
+                max_depth=4,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                reg_lambda=1,
+                objective='reg:squarederror',
+                random_state=42,
+                n_jobs=-1
+            )
+        )}
         
-     
+        #models = {'linear' :  MultiOutputRegressor(Ridge(alpha= 1)), 'tree': RandomForestRegressor(n_estimators=50, max_depth=5, n_jobs=-1, random_state=42)}
         # alphas = np.logspace(-3, 3, 50)
 
         # model = MultiOutputRegressor(RidgeCV(alphas=alphas))
@@ -142,8 +155,8 @@ class treat_continous_labels:
         preds_js_list = []
         baseline_rmse_list = []
         baseline_js_list = []
-        self.rmse_dict = {k+1: [] for k in range(4)}
-        self.baseline_dict = {k+1: [] for k in range(4)}
+        self.rmse_dict = {k+1: [] for k in range(3)}
+        self.baseline_dict = {k+1: [] for k in range(3)}
 
         X = np.asarray(X)
         y = np.asarray(y)
@@ -185,11 +198,11 @@ class treat_continous_labels:
            
 
 
-             #preds = softmax(preds, axis=1)
+            preds = softmax(preds, axis=1)
             # ensure positive
-            preds = np.clip(preds, 0, None)
-            # normalize to sum to 1
-            preds = preds / preds.sum(axis=1, keepdims=True)
+            # preds = np.clip(preds, 0, None)
+            # # normalize to sum to 1
+            # preds = preds / preds.sum(axis=1, keepdims=True)
 
             y_true.append(y_test[0])
             y_pred.append(preds[0])
@@ -234,7 +247,7 @@ class treat_continous_labels:
     
     ##################calculate r square###################
     def rsquare(self, y_true, y_pred):
-        archetypes = ["Arch1","Arch2","Arch3","Arch4"]
+        archetypes = ["Arch1","Arch2","Arch3"]
         r2_scores = []
         for i, arc in enumerate(archetypes):
             r2 = r2_score(y_true[:,i], y_pred[:,i])
@@ -370,7 +383,7 @@ class treat_continous_labels:
     def shap_values(self, X, y, feature_names, metadata):
        
         print("\nComputing SHAP explanations\n")
-        archetypes = ["Arch1","Arch2","Arch3","Arch4"]
+        archetypes = ["Arch1","Arch2","Arch3"]
 
         shap_results = {}
 
@@ -454,7 +467,7 @@ class treat_continous_labels:
 
 ########scatter plot ###########
     def scatter_plot(self,y_true, y_pred):
-        archetypes = ["Arch1","Arch2","Arch3","Arch4"]
+        archetypes = ["Arch1","Arch2","Arch3"]
 
         fig, axes = plt.subplots(2,2, figsize=(10,10))
         axes = axes.flatten()
@@ -583,7 +596,7 @@ class treat_continous_labels:
             yticks = ax_male.get_yticks()
             yticklabels = [t.get_text() for t in ax_male.get_yticklabels()]
             for y, feature in zip(yticks, yticklabels):
-                symbol = treat_continous_labels.significance_symbol(padj_dict[feature])
+                symbol = treat_continous_labels_second_method.significance_symbol(padj_dict[feature])
                 if self.run_model == 'linear':
                     ax_male.text(2.5, y, symbol, ha="right", va="center", fontsize=14, fontweight="bold")
                 else:
@@ -615,9 +628,9 @@ class treat_continous_labels:
     
     #####################save predictions #####################
     def save_predictions(self, y_true, y_pred):
-        cols_true = ["Arch1_true", "Arch2_true", "Arch3_true", "Arch4_true"]
-        cols_pred = ["Arch1_pred", "Arch2_pred", "Arch3_pred", "Arch4_pred"]
-        cols_score  = ["Arch1_score", "Arch2_score", "Arch3_score", "Arch4_score"]
+        cols_true = ["Arch1_true", "Arch2_true", "Arch3_true"]
+        cols_pred = ["Arch1_pred", "Arch2_pred", "Arch3_pred"]
+        cols_score  = ["Arch1_score", "Arch2_score", "Arch3_score"]
 
         df_true = pd.DataFrame(y_true, columns=cols_true)
         df_pred = pd.DataFrame(y_pred, columns=cols_pred)
@@ -631,7 +644,7 @@ class treat_continous_labels:
 
     #### plot prediction score###############
     def plot_prediction_score(self, y_true, y_pred):
-        archetypes = ["Arch1","Arch2","Arch3","Arch4"]
+        archetypes = ["Arch1","Arch2","Arch3"]
 
         score = 1 - np.abs(y_true - y_pred)
 
@@ -652,7 +665,7 @@ class treat_continous_labels:
 
     ### create confusion matrix of dominant archetype##############
     def confusion_matrix(self, y_true, y_pred):
-            archetypes = ["Arch1","Arch2","Arch3","Arch4"]
+            archetypes = ["Arch1","Arch2","Arch3"]
             # Get dominant archetype (index of max)
             y_true_dom = np.argmax(y_true, axis=1)
             y_pred_dom = np.argmax(y_pred, axis=1)
@@ -733,6 +746,7 @@ class treat_continous_labels:
 ############Calculate baseline to compare with the model############
     def calculate_baseline_rmse(self, y_train, y_test):
         baseline_pred = np.mean(y_train, axis=0)
+        #baseline_pred= 1/3 * np.ones_like(y_test) #predict the same for all archetypes like in the center of the simplex
         baseline_rmse = np.sqrt(mean_squared_error(y_test, baseline_pred))
         baseline_js = jensenshannon(y_test, baseline_pred)
        # print(f"Baseline RMSE: {baseline_rmse:.4f}")
@@ -754,19 +768,20 @@ class treat_continous_labels:
 
     #rmse for each archetype
     def rmse_each_archetype(self,y_true, y_pred):
-        for k in range(4):
+        for k in range(3):
             err = (y_true[k] - y_pred[k]) ** 2
             self.rmse_dict[k+1].append(np.sqrt(err))  # per-sample RMSE = abs error
 
     #baseline for each archetype
     def baseline_each_archetype(self, y_train, y_test):
         baseline_pred = np.mean(y_train, axis=0)
-        for k in range(4):
+        #baseline_pred= 1/3 * np.ones_like(y_test) #predict the same for all archetypes like in the center of the simplex
+        for k in range(3):
             err = (y_test[k] - baseline_pred[k]) ** 2
             self.baseline_dict[k+1].append(np.sqrt(err))  # per-sample RMSE = abs error
 #########plot for each archetype the comparison between model and baseline
     def plot_each_archetype_comparison(self, rmse_dict, baseline_dict, output_dir, metric_name):
-        archetypes = ["Arch1","Arch2","Arch3","Arch4"]
+        archetypes = ["Arch1","Arch2","Arch3"]
         n_labels = len(archetypes)
 
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))

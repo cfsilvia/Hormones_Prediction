@@ -1,5 +1,6 @@
 from manage_data import manage_data
 from create_personality import create_personality
+from create_personality_second_method import create_personality_second_method
 from treat_data import treat_data
 #from treat_data_personality import treat_data_personality
 import pandas as pd
@@ -9,6 +10,7 @@ from plot_data_personality import plot_data_personality
 from treat_validation_data import treat_validation_data
 from Find_better_features import Find_better_features
 from treat_continous_labels_1 import treat_continous_labels
+from treat_continous_labels_1_second_method import treat_continous_labels_second_method
 from General_functions import General_functions
 from statistics_class import statistics_class
 import yaml
@@ -152,16 +154,20 @@ def main_menu(choice,data):
            run_correlation = data['6']['run_correlation']
            run_features_normalization = data['6']['run_features_normalization']
            type_model = data['6']['type_model']
+           external_file = data['6']['external_file']
+           compare_with_baseline = data['6']['compare_with_baseline']
+
 
 
 
            if create_table:
                 new_obj = create_personality(file_pareto,output_dir, hormones_file)
+                #new_obj.add_status_to_hormones_from_external_file(external_file)
                 data_to_predict = new_obj() #create the table with the personality status for each data point
 
            if run_model:  
 
-                new_obj = treat_continous_labels(output_dir + 'data_for_model_with_biomarkers.xlsx',output_dir,run_features_normalization, type_model)
+                new_obj = treat_continous_labels(output_dir + 'data_for_model_with_biomarkers.xlsx',output_dir,run_features_normalization, type_model, compare_with_baseline)
                 new_obj()
 
            if run_correlation:
@@ -184,7 +190,26 @@ def main_menu(choice,data):
                 model.plot_3d()
                 # Save results
                # model.save()
+        elif choice == "8": #use in the data with 3 archetypes
+           file_pareto = data['8']['data_cluster']
+           output_dir = data['8']['output_dir']
+           hormones_file = data['8']['hormones_file']
+           create_table = data['8']['create_table']
+           run_model = data['8']['run_model']
+           
+           run_features_normalization = data['8']['run_features_normalization']
+           type_model = data['8']['type_model']
+           compare_with_baseline = data['8']['compare_with_baseline']
 
+
+           if create_table:
+                new_obj = create_personality_second_method(file_pareto,output_dir, hormones_file)
+                data_to_predict = new_obj() #create the table with the personality status for each data point
+
+           if run_model:  
+
+                new_obj = treat_continous_labels_second_method(output_dir + 'data_for_model_with_biomarkers.xlsx',output_dir,run_features_normalization, type_model, compare_with_baseline)
+                new_obj()
 
 
      
