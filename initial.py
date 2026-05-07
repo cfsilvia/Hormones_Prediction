@@ -2,6 +2,7 @@ from manage_data import manage_data
 from create_personality import create_personality
 from create_personality_second_method import create_personality_second_method
 from treat_data import treat_data
+from Multi_classification import MultiClassification
 #from treat_data_personality import treat_data_personality
 import pandas as pd
 import pickle
@@ -19,6 +20,9 @@ import Auxiliary_functions
 import os
 from scipy.stats import mannwhitneyu
 from Pareto import PCHA
+from sklearn.feature_selection import SelectKBest, f_classif
+from plot_data_personality_for_pairs import plot_data_personality_for_pairs
+
 
 
 #from sklearn.ensemble import AdaBoostClassifier
@@ -210,9 +214,65 @@ def main_menu(choice,data):
 
                 new_obj = treat_continous_labels_second_method(output_dir + 'data_for_model_with_biomarkers.xlsx',output_dir,run_features_normalization, type_model, compare_with_baseline)
                 new_obj()
+        
+        elif choice == "9":
+                file_pareto = data['9']['data_cluster']
+                output_dir = data['9']['output_dir']
+                hormones_file = data['9']['hormones_file']
+                create_table = data['9']['create_table']
+                run_model = data['9']['run_model']
+                
+                run_features_normalization = data['9']['run_features_normalization']
+                type_model = data['9']['type_model']
+                run_plot = data['9']['run_plot']
+                model_to_plot = data['9']['model_to_plot']
+                plot_type = data['9']['plot_type']
+
+                
 
 
-     
+                if create_table:
+                        new_obj = create_personality_second_method(file_pareto,output_dir, hormones_file)
+                        data_to_predict = new_obj() #create the table with the personality status for each data point
+
+                if run_model:  
+
+                        new_obj = MultiClassification(output_dir + 'data_for_model_with_biomarkers.xlsx',output_dir,type_model, number_archetypes = 3, normalization = run_features_normalization)
+                        new_obj()
+
+                if run_plot:
+                     with open( output_dir  + 'learning_results.pkl', "rb") as f:
+                            data = pickle.load(f)
+                     plotter = plot_data_personality_for_pairs(data, model_to_plot, output_dir)
+                     plotter()
+               
+        elif choice == "10":
+           file_pareto = data['10']['data_pareto']
+           output_dir = data['10']['output_dir']
+           hormones_file = data['10']['hormones_file']
+           create_table = data['10']['create_table']
+           run_model = data['10']['run_model']
+           run_features_normalization = data['10']['run_features_normalization']
+           type_model = data['10']['type_model']
+           select_pairs_mode = data['10']['select_pairs_mode']
+           run_plot = data['10']['run_plot']
+           model_to_plot = data['10']['model_to_plot']
+
+           if create_table:
+                new_obj = create_personality(file_pareto,output_dir, hormones_file)
+                data_to_predict = new_obj() #create the table with the personality status for each data point
+           if run_model:  
+                new_obj = MultiClassification(output_dir + 'data_for_model_with_biomarkers.xlsx',output_dir,type_model, 
+                                              number_archetypes = 4, normalization = run_features_normalization, select_pairs_mode = select_pairs_mode)
+                new_obj()
+           if run_plot:
+                     with open( output_dir  + 'learning_results.pkl', "rb") as f:
+                            data = pickle.load(f)
+                     plotter = plot_data_personality_for_pairs(data, model_to_plot, output_dir)
+                     plotter()
+ 
+
+
                 
 if __name__ == "__main__":
 

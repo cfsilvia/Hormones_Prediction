@@ -285,15 +285,17 @@ class create_personality:
         for i, x in enumerate(X):
             w = create_personality.barycentric_solve(x, A)
 
-            #  Only fix if negative weights exist
-            if np.any(w < -tol):
-                negative_count += 1  # <-- increment
-                W[i] = create_personality.qp_project(x, A)
-            else:
-                # keep original (clean numerical noise)
-                w[w < 0] = 0
-                W[i] = w / np.sum(w)
-        print(f"Number of points with negative weights: {negative_count}")
+        #     #  Only fix if negative weights exist
+        #     if np.any(w < -tol):
+        #         negative_count += 1  # <-- increment
+        #         W[i] = create_personality.qp_project(x, A)
+        #     else:
+        #         # keep original (clean numerical noise)
+        #         w[w < 0] = 0
+        #         W[i] = w / np.sum(w)
+            W[i] = w
+        # print(f"Number of points with negative weights: {negative_count}")
+
         return W
     
     #Add hormones status from external file

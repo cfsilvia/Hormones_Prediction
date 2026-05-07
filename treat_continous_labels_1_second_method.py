@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import shap
 from scipy.stats import pearsonr
 
-from sklearn.model_selection import KFold, GroupKFold, LeaveOneOut
+from sklearn.model_selection import  LeaveOneOut
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import RidgeCV
 from sklearn.multioutput import MultiOutputRegressor
@@ -40,10 +40,10 @@ class treat_continous_labels_second_method:
         
     def __call__(self):
 
-        X, y, feature_names, metadata = self.load_data()
+        X, y, y_logratio ,feature_names, metadata = self.load_data()
 
 
-        y_true, y_pred, rmse, cosine_sim, kl_div, ent = self.cv_pipeline(X, y)
+        y_true, y_pred, rmse, cosine_sim, kl_div, ent = self.loocv_pipeline(X, y, y_logratio)
 
         
 
@@ -58,7 +58,7 @@ class treat_continous_labels_second_method:
             original_rmse, permuted_rmses, p_value_rmse, 
             original_cosine,permutated_cosines, p_value_cosine,
             original_kl,permutated_kls, p_value_kl,
-            original_ent,permutated_ents, p_value_ent) = self.permutation_test(X, y)
+            original_ent,permutated_ents, p_value_ent) = self.permutation_test(X, y,y_logratio)
 
         self.plot_permutation_test_results(permuted_rmses, original_rmse, p_value_rmse)
         self.plot_permutation_test_results_cosine(permutated_cosines, original_cosine, p_value_cosine)
@@ -100,11 +100,20 @@ class treat_continous_labels_second_method:
             ['Experiment','sex','Type','Genotype','Hierarchy','Mice.chips',
              'Last.day.Glicko','Animal','sexFeature', 'Arch1','Arch2','Arch3'], axis=1)
 
-        y = data[['Arch1','Arch2','Arch3']]
+        y = data[['Arch1','Arch2','Arch3']].values
+        ##add log to labels
+        # avoid zeros for log-ratio transform
+        eps = 1e-10
+        y_safe = np.clip(y, eps, 1.0)
+        # additive log-ratio using Arch3 as denominator
+        z1 = np.log(y_safe[:, 0] / y_safe[:, 2])   # log(Arch1 / Arch3)
+        z2 = np.log(y_safe[:, 1] / y_safe[:, 2])   # log(Arch2 / Arch3)
+        y_logratio = np.column_stack([z1, z2])
+
 
         feature_names = X.columns.tolist()
 
-        return X, y, feature_names, metadata
+        return X, y, y_logratio ,feature_names, metadata
 
 
 
@@ -145,10 +154,9 @@ class treat_continous_labels_second_method:
 
     ################ LOOCV ################
 
-    def cv_pipeline(self, X, y):
+    def loocv_pipeline(self, X, y, y_logratio):
 
-        cv = KFold(n_splits=5, shuffle=True, random_state=42)
-        splits = cv.split(X)
+        loo = LeaveOneOut()
 
         y_true = []
         y_pred = []
@@ -161,14 +169,16 @@ class treat_continous_labels_second_method:
 
         X = np.asarray(X)
         y = np.asarray(y)
+        y_logratio = np.asarray(y_logratio)
      
         index = 0
         # alphas_used = []
 
-        for train_idx, test_idx in splits:
+        for train_idx, test_idx in loo.split(X):
 
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
+            y_train_log, y_test_log = y_logratio[train_idx], y_logratio[test_idx]
             
             #Normalize features
             if self.run_features_normalization:
@@ -187,33 +197,25 @@ class treat_continous_labels_second_method:
             # preds = np.column_stack(preds_list)
             #Train model
             model = self.build_model()
-            model.fit(X_train, y_train)
+            model.fit(X_train, y_train_log) #fit on log ratio labels
 
-            #alpha taken
-            
-            # for i, est in enumerate(model.estimators_):
-            #     alphas_used.append(est.alpha_)
-            ###########
-
-            preds = model.predict(X_test)
            
 
-
-            preds = softmax(preds, axis=1)
-            # ensure positive
-            # preds = np.clip(preds, 0, None)
-            # # normalize to sum to 1
-            # preds = preds / preds.sum(axis=1, keepdims=True)
+            pred_log = model.predict(X_test)   
+             # ensure 2D
+            #pred_log = np.atleast_2d(pred_log)           # shape (1,2)
+            pred_comp = self.logratio_to_composition(pred_log)[0] # convert back to composition
+         
 
             y_true.append(y_test[0])
-            y_pred.append(preds[0])
+            y_pred.append(pred_comp[0])
 
             if self.compare_with_baseline:
-                pred_rmse = np.sqrt(mean_squared_error(y_test[0], preds[0]))
+                pred_rmse = np.sqrt(mean_squared_error(y_test[0], pred_comp))
                 preds_rmse_list.append(pred_rmse)
-                pred_js = jensenshannon(y_test[0], preds[0])
+                pred_js = jensenshannon(y_test[0], pred_comp)
                 preds_js_list.append(pred_js)
-                self.rmse_each_archetype(y_test[0], preds[0])
+                self.rmse_each_archetype(y_test[0], pred_comp)
 
                 baseline_rmse, baseline_js=self.calculate_baseline_rmse(y_train,y_test[0])
                 baseline_rmse_list.append(baseline_rmse)
@@ -234,8 +236,8 @@ class treat_continous_labels_second_method:
         y_true = np.array(y_true)
         y_pred = np.array(y_pred)
 
-        row_sums_true = np.sum(y_true, axis=1)
-        row_sums_pred = np.sum(y_pred, axis=1)
+       # row_sums_true = np.sum(y_true, axis=1)
+        #row_sums_pred = np.sum(y_pred, axis=1)
 
         rmse = np.sqrt(mean_squared_error(y_true, y_pred))
         print(f"RMSE: {rmse}")
@@ -273,9 +275,9 @@ class treat_continous_labels_second_method:
 
     ################ Permutation test ################
 
-    def permutation_test(self, X, y, n_permutations=200):
+    def permutation_test(self, X, y,y_logratio, n_permutations=200):
 
-        original_rmse, original_cosine, original_kl, original_ent= self.cv_pipeline(X, y)[2:6]
+        original_rmse, original_cosine, original_kl, original_ent= self.loocv_pipeline(X, y)[2:6]
 
         permuted_rmses = []
         permutated_cosines = []
@@ -283,8 +285,12 @@ class treat_continous_labels_second_method:
         permutated_ents = []    
 
         for i in range(n_permutations):
-            y_permuted = np.random.permutation(y)
-            permuted_rmse, cosine_sim, kl_div, ent= self.cv_pipeline(X, y_permuted)[2:6]
+            perm_idx = np.random.permutation(len(y_logratio))
+            y_logratio_permuted = y_logratio[perm_idx]
+            y_comp_permuted = y[perm_idx]
+
+            permuted_rmse, cosine_sim, kl_div, ent= self.loocv_pipeline(X, y_comp_permuted, y_logratio_permuted)[2:6]
+           
             permuted_rmses.append(permuted_rmse)
             permutated_cosines.append(cosine_sim)
             permutated_kls.append(kl_div)
@@ -384,7 +390,7 @@ class treat_continous_labels_second_method:
     def shap_values(self, X, y, feature_names, metadata):
        
         print("\nComputing SHAP explanations\n")
-        archetypes = ["Arch1","Arch2","Arch3"]
+        targets = ["log(Arch1/Arch3)", "log(Arch2/Arch3)"]
 
         shap_results = {}
 
@@ -398,15 +404,15 @@ class treat_continous_labels_second_method:
 
         filepath = os.path.join(self.output_dir, 'shap_values.xlsx')
         with pd.ExcelWriter(filepath) as writer:
-          for i, arc in enumerate(archetypes):
+         for i, target_name in enumerate(targets):
             explainer = shap.Explainer(model.estimators_[i], X_scaled_df)
             shap_values = explainer(X_scaled_df)
-            shap_results[arc] = shap_values
+            shap_results[target_name] = shap_values
 
-            shap_vals = shap_results[arc].values
+            shap_vals = shap_results[target_name].values
             df = pd.DataFrame(shap_vals, columns=feature_names)
-            df = pd.concat([metadata, df], axis=1)
-            df.to_excel(writer, sheet_name=arc, index=False)
+            df = pd.concat([metadata.reset_index(drop=True), df], axis=1)
+            df.to_excel(writer, sheet_name=f"Target_{i+1}", index=False)
 
         return shap_results, X_scaled
 
@@ -747,7 +753,8 @@ class treat_continous_labels_second_method:
 ############Calculate baseline to compare with the model############
     def calculate_baseline_rmse(self, y_train, y_test):
         baseline_pred = np.mean(y_train, axis=0)
-        #baseline_pred= 1/3 * np.ones_like(y_test) #predict the same for all archetypes like in the center of the simplex
+        baseline_pred = baseline_pred / baseline_pred.sum()
+        
         baseline_rmse = np.sqrt(mean_squared_error(y_test, baseline_pred))
         baseline_js = jensenshannon(y_test, baseline_pred)
        # print(f"Baseline RMSE: {baseline_rmse:.4f}")
@@ -776,10 +783,12 @@ class treat_continous_labels_second_method:
     #baseline for each archetype
     def baseline_each_archetype(self, y_train, y_test):
         baseline_pred = np.mean(y_train, axis=0)
-        #baseline_pred= 1/3 * np.ones_like(y_test) #predict the same for all archetypes like in the center of the simplex
+        baseline_pred = baseline_pred / baseline_pred.sum()
+        
         for k in range(3):
             err = (y_test[k] - baseline_pred[k]) ** 2
             self.baseline_dict[k+1].append(np.sqrt(err))  # per-sample RMSE = abs error
+
 #########plot for each archetype the comparison between model and baseline
     def plot_each_archetype_comparison(self, rmse_dict, baseline_dict, output_dir, metric_name):
         archetypes = ["Arch1","Arch2","Arch3"]
@@ -800,3 +809,27 @@ class treat_continous_labels_second_method:
         
         plt.savefig(os.path.join(self.output_dir, (metric_name + '_comparison_each_archetype.pdf')))
         plt.close()
+
+
+    @staticmethod
+    def composition_to_logratio(y_comp, eps=1e-10):
+        y_safe = np.clip(np.asarray(y_comp), eps, 1.0)
+        z1 = np.log(y_safe[:, 0] / y_safe[:, 2])
+        z2 = np.log(y_safe[:, 1] / y_safe[:, 2])
+        return np.column_stack([z1, z2])
+    
+    @staticmethod
+    def logratio_to_composition(z):
+        z = np.asarray(z)
+        if z.ndim == 1:
+            z = z.reshape(1, -1)
+
+        e1 = np.exp(z[:, 0])
+        e2 = np.exp(z[:, 1])
+        denom = 1.0 + e1 + e2
+
+        a1 = e1 / denom
+        a2 = e2 / denom
+        a3 = 1.0 / denom
+
+        return np.column_stack([a1, a2, a3])
