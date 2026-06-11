@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -5,14 +6,14 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import f as f_dist, entropy, pearsonr
 from scipy.spatial import ConvexHull, distance
-from archetypal import archetypal_analysis
+from archetypal import archetypal_analysis, simplex_ls, project_onto_convex_polygon
 
 # ---------------------------------------------------------------------------
 # I/O
 # ---------------------------------------------------------------------------
 
-def load_csv(path):
-    df = pd.read_csv(path)
+def load_excel(path):
+    df = pd.read_excel(path)
     print(f"Loaded {path} - {df.shape}")
     return df
 
@@ -48,7 +49,7 @@ def pca_diagnostics(X_scaled, pca_2d, n_objects):
     n90 = int(np.searchsorted(cumvar, 0.90) + 1)
     n95 = int(np.searchsorted(cumvar, 0.95) + 1)
     print(f"PCA fidelity:  90% var at {n90} PCs,  95% at {n95} PCs")
-
+    #fidelity of reconstruction in 2D
     X_hat = pca_2d.inverse_transform(pca_2d.transform(X_scaled))
     spe = np.sum((X_scaled - X_hat) ** 2, axis=1)
     T2 = np.sum((pca_2d.transform(X_scaled) / np.sqrt(np.maximum(pca_2d.explained_variance_, 1e-15))) ** 2, axis=1)
@@ -88,18 +89,63 @@ def archetype_metrics(X_pca, Z, A):
 
 
 # ---------------------------------------------------------------------------
+# Robust Archetypal Analysis
+# ---------------------------------------------------------------------------
+
+def robust_archetypes(X, k, n_iter=20, sample_frac=0.8, tol=1e-4, verbose=True):
+    """Run PCHA on random subsamples and return consensus archetypes.
+
+    Each iteration samples `sample_frac` of points, runs PCHA,
+    then all archetype coordinates are collected and clustered
+    with k-means to resolve label switching.
+    """
+    from sklearn.cluster import KMeans
+    n = X.shape[0]
+    subsample_size = int(n * sample_frac)
+    all_Z = []
+
+    for it in range(n_iter):
+        idx = np.random.default_rng(it).choice(n, subsample_size, replace=False)
+        hull = ConvexHull(X[idx])
+        Z_sub, _, _ = archetypal_analysis(X[idx], k, hull=hull, max_iter=20, tol=tol, verbose=False)
+        all_Z.append(Z_sub)
+        if verbose and (it + 1) % max(1, n_iter // 5) == 0:
+            print(f"  Bootstrap {it+1}/{n_iter}")
+
+    all_Z = np.vstack(all_Z)
+    km = KMeans(n_clusters=k, random_state=42, n_init='auto').fit(all_Z)
+    Z_robust = km.cluster_centers_
+
+    # Ensure archetypes are inside convex hull
+    hull_full = ConvexHull(X)
+    for j in range(k):
+        Z_robust[j] = project_onto_convex_polygon(Z_robust[j], hull_full)
+
+    # Refine: fix Z, compute A for all points
+    A_robust = np.zeros((n, k))
+    for i in range(n):
+        A_robust[i] = simplex_ls(Z_robust, X[i])
+
+    err = np.sum((X - A_robust @ Z_robust) ** 2)
+    return Z_robust, A_robust, err
+
+
+# ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
 
-def plot_overview(X_pca, X2_pca, Z, A, hull_arch, evr, cumvar, n90, n95, spe, spe_limit, spe2):
+def plot_overview(X_pca, X2_pca, Z, A, hull_arch, evr, cumvar, n90, n95, spe, spe_limit, spe2, save_dir='.'):
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
     ax = axes[0, 0]
     ax.scatter(X_pca[:, 0], X_pca[:, 1], c='steelblue', alpha=0.4, s=25, label='Data (n=360)')
     ax.scatter(X2_pca[:, 0], X2_pca[:, 1], c='limegreen', alpha=0.6, s=30,
-               marker='s', edgecolors='k', linewidths=0.3, label='Per-day (n=60)')
+               marker='s', edgecolors='k', linewidths=0.3, label='Mean-of-the-days (n=60)')
     ax.scatter(Z[:, 0], Z[:, 1], c='crimson', s=100, marker='D',
                edgecolors='k', linewidths=0.8, zorder=5, label='Archetypes')
+    for i, z in enumerate(Z):
+        ax.annotate(f'A{i+1}', z, textcoords='offset points', xytext=(8, 8),
+                    fontsize=11, fontweight='bold', color='crimson')
     for s in hull_arch.simplices:
         ax.plot(Z[s, 0], Z[s, 1], 'crimson', lw=2, alpha=0.8)
     ax.plot(Z[hull_arch.vertices, 0], Z[hull_arch.vertices, 1],
@@ -145,11 +191,11 @@ def plot_overview(X_pca, X2_pca, Z, A, hull_arch, evr, cumvar, n90, n95, spe, sp
     ax.set_title(f'PCHA reconstruction R^2')
     ax.set_aspect('equal'); ax.grid(alpha=0.3)
 
-    plt.tight_layout(); plt.savefig('pca_archetypes.png', dpi=150); plt.close()
-    print("Saved pca_archetypes.png")
+    plt.tight_layout(); plt.savefig(os.path.join(save_dir, 'pca_archetypes.pdf'), dpi=300); plt.close()
+    print(f"Saved pca_archetypes.pdf in {save_dir}")
 
 
-def plot_correlations(A, X, param_names):
+def plot_correlations(A, X, param_names, save_dir='.'):
     k = A.shape[1]
     all_corr = np.zeros((k, X.shape[1]))
     all_pvals = np.zeros((k, X.shape[1]))
@@ -166,18 +212,28 @@ def plot_correlations(A, X, param_names):
         for rank, p in enumerate(idx, 1):
             print(f"    {rank:2d}.  {'+' if all_corr[j, p] > 0 else '-'}  r={all_corr[j, p]:+.3f}  {param_names[p]}")
 
-    alpha = 0.05 / (k * X.shape[1])
+    p_flat = all_pvals.ravel()
+    m = len(p_flat)
+    order = np.argsort(p_flat)
+    p_sorted = p_flat[order]
+    bh_thresh = np.arange(1, m + 1) / m * 0.05
+    max_sig = np.where(p_sorted <= bh_thresh)[0]
+    if len(max_sig) > 0:
+        p_cutoff = p_sorted[max_sig[-1]]
+    else:
+        p_cutoff = 0
+
     fig, axes = plt.subplots(1, 3, figsize=(18, 8))
     for j in range(k):
         ax = axes[j]
-        mask = (all_pvals[j] < alpha) & (np.abs(all_corr[j]) >= 0.25)
+        mask = all_pvals[j] <= p_cutoff
         vars_ = np.where(mask)[0]
         vals = all_corr[j, vars_]
         if len(vals) == 0:
             ax.text(0.5, 0.5, 'No significant correlations', ha='center', va='center', transform=ax.transAxes)
             ax.set_title(f'Archetype {j+1}', fontsize=12, fontweight='bold')
             continue
-        order = np.argsort(np.abs(vals))
+        order = np.argsort(vals)
         vals = vals[order]
         names = [param_names[vars_[i]] for i in order]
         colors = ['crimson' if v > 0 else 'steelblue' for v in vals]
@@ -187,14 +243,20 @@ def plot_correlations(A, X, param_names):
         ax.set_xlabel('Pearson r', fontsize=9)
         ax.set_title(f'Archetype {j+1}  ({len(vals)} sig.)', fontsize=12, fontweight='bold')
         ax.grid(alpha=0.2, axis='x')
-    fig.suptitle('Archetype × Parameter Correlations (Bonferroni + |r|≥0.25)', fontsize=13, fontweight='bold')
-    plt.tight_layout(); plt.savefig('pca_archetypes_corr.png', dpi=150); plt.close()
-    print("Saved pca_archetypes_corr.png")
+    fig.suptitle('Archetype × Parameter Correlations (BH FDR less than 0.05)', fontsize=13, fontweight='bold')
+    plt.tight_layout(); plt.savefig(os.path.join(save_dir, 'pca_archetypes_corr.pdf'), dpi=300); plt.close()
+    print(f"Saved pca_archetypes_corr.pdf in {save_dir}")
 
 
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
+
+ARCH_LABELS = {
+    1: 'Social — high snout contacts, time together, approaching',
+    2: 'High-Intensity — high running velocity, chasing, being chased',
+    3: 'Sedentary — high sleep, low movement, walking & distance',
+}
 
 def print_summary(evr, err, area_ratio, ent_mean, Z, closest):
     print(f"\n=== Summary ===")
@@ -204,7 +266,7 @@ def print_summary(evr, err, area_ratio, ent_mean, Z, closest):
     print(f"Mean mixing entropy: {ent_mean:.3f}")
     print(f"Archetypes (PC coordinates):")
     for i, z in enumerate(Z):
-        print(f"  A{i+1}: ({z[0]:+.3f}, {z[1]:+.3f})  closest point = {closest[i]}")
+        print(f"  A{i+1}: ({z[0]:+.3f}, {z[1]:+.3f})  closest point = {closest[i]}  — {ARCH_LABELS[i+1]}")
 
 
 # ---------------------------------------------------------------------------
@@ -212,16 +274,31 @@ def print_summary(evr, err, area_ratio, ent_mean, Z, closest):
 # ---------------------------------------------------------------------------
 
 def main():
-    df = load_csv('selected_columns_total_data_behaviour_forcode.csv')
-    X = df.select_dtypes(include='number').values.astype(float)
-    param_names = df.columns.tolist()
-    if X.shape[0] != 360:
-        X = np.random.default_rng(42).standard_normal((360, 50))
+   #=============
+   #User settings
+    #=============
+    directory = r'U:\Users\Silvia\RutiFrishman_2025_hormones_paper\Personality_Prediction_March_2026\June_pareto_all_data'
+    input_file = 'selected_columns_total_data_behaviour_without_repetitions.xlsx'
+    input_file_mean_days = 'Data_behaviour_per_day_without_repetitions.xlsx'
+    #=================
+    total_data = load_excel(os.path.join(directory, input_file))
+    df = total_data.copy()
+    df = df.drop(columns=['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal'])  # Drop non-numeric columns
+    metadata_cols = total_data[['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']]
 
-    df2 = load_csv('Data_behaviour_per_day_1.csv')
+    X = df.select_dtypes(include='number').values.astype(float)
+    param_names = df.columns.tolist() 
+    #============================================
+    #load per-day data and align columns
+    total_data_mean_days = load_excel(os.path.join(directory, input_file_mean_days))
+    df2 = total_data_mean_days.copy()
+    df2 = df2.drop(columns=['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']) 
+    metadata_cols2 = total_data_mean_days[['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']]
+    
+    #align columns of df2 to match df
     X2 = align_columns(df, df2)
     print(f"  Aligned {X2.shape[1]} / {df.shape[1]} columns")
-
+    ####################################################################################
     scaler, pca, X_scaled, X_pca = fit_pca(X)
     X2_scaled = scaler.transform(X2)
     X2_pca = pca.transform(X2_scaled)
@@ -230,21 +307,35 @@ def main():
 
     cumvar, n90, n95, spe, spe_limit = pca_diagnostics(X_scaled, pca, X.shape[0])
     top_loadings(pca, param_names)
-
+#################################################
     k_arch = 3
     print(f"\n=== Archetypal Analysis (k={k_arch}) ===")
-    Z, A, err = archetypal_analysis(X_pca, k_arch, verbose=True)
-    print(f"Final reconstruction error: {err:.4f}")
+    Z, A, err = robust_archetypes(X_pca, k_arch, n_iter=20, verbose=True)
+    print(f"Final reconstruction error (robust): {err:.4f}")
 
+    # ---- compute mixing coefficients for per-day points ----
+    A2 = np.zeros((X2_pca.shape[0], k_arch))
+    for i in range(X2_pca.shape[0]):
+        A2[i] = simplex_ls(Z, X2_pca[i])
+    df_out = metadata_cols2.reset_index(drop=True).copy()
+    for j in range(k_arch):
+        df_out[f'Archetype_{j+1}'] = A2[:, j]
+    arch_idx = A2.argmax(axis=1) + 1
+    df_out['Archetype_number'] = 'Archetype_' + arch_idx.astype(str)
+    df_out['Archetype_description'] = [ARCH_LABELS[i] for i in arch_idx]
+    out_path = os.path.join(directory, 'archetype_coefficients_per_day.xlsx')
+    df_out.to_excel(out_path, index=False)
+    print(f"Saved {out_path}")
+    #========================================================
     hull_arch, area_ratio, closest, ent = archetype_metrics(X_pca, Z, A)
 
     X2_hat = pca.inverse_transform(X2_pca)
     spe2 = np.sum((X2_scaled - X2_hat) ** 2, axis=1)
 
-    plot_overview(X_pca, X2_pca, Z, A, hull_arch, evr, cumvar, n90, n95, spe, spe_limit, spe2)
+    plot_overview(X_pca, X2_pca, Z, A, hull_arch, evr, cumvar, n90, n95, spe, spe_limit, spe2, save_dir=directory)
 
     print(f"\n=== Archetype × Parameter Correlations ===")
-    plot_correlations(A, X, param_names)
+    plot_correlations(A, X, param_names, save_dir=directory)
 
     print_summary(evr, err, area_ratio, ent.mean(), Z, closest)
 

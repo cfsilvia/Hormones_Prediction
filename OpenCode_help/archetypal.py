@@ -63,6 +63,7 @@ def archetypal_analysis(X, k, hull=None, max_iter=100, tol=1e-6, verbose=True):
     for it in range(max_iter):
         for i in range(n):
             A[i] = simplex_ls(Z, X[i])
+        #update archetypes    
         Z_new = np.linalg.lstsq(A, X, rcond=None)[0]
         for j in range(k):
             Z_new[j] = project_onto_convex_polygon(Z_new[j], hull)
