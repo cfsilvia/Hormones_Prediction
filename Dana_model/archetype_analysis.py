@@ -75,3 +75,55 @@ def compute_archetype_probabilities(pca_coords, archetypes):
         probs[i] = alpha
 
     return probs
+
+
+def predict_archetype_loocv(df, metadata_cols):
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.neural_network import MLPClassifier
+    from xgboost import XGBClassifier
+    from sklearn.preprocessing import LabelEncoder, StandardScaler
+    from sklearn.utils.class_weight import compute_class_weight
+
+    feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype']
+    X = df[feature_cols].select_dtypes(include=[np.number]).values
+    le = LabelEncoder()
+    y = le.fit_transform(df['Dominant_archetype'].values)
+    n = len(df)
+
+    models = {
+        'LogReg': LogisticRegression(max_iter=2000, random_state=0, class_weight='balanced'),
+        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(50,), random_state=0),
+        'XGBoost': XGBClassifier(n_estimators=100, random_state=0, eval_metric='mlogloss',
+                                 objective='multi:softmax', num_class=len(le.classes_)),
+    }
+
+    results = {}
+    for name, model in models.items():
+        preds = np.empty(n, dtype=int)
+        scaler = StandardScaler()
+        for i in range(n):
+            X_train = np.delete(X, i, axis=0)
+            y_train = np.delete(y, i, axis=0)
+            X_test = X[i:i+1]
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_test_scaled = scaler.transform(X_test)
+            model_clone = model.__class__(**model.get_params())
+            if name == 'MLP':
+                classes = np.unique(y_train)
+                cw = dict(zip(classes, compute_class_weight('balanced', classes=classes, y=y_train)))
+                sample_weights = np.array([cw[v] for v in y_train])
+                model_clone.fit(X_train_scaled, y_train, sample_weight=sample_weights)
+            elif name == 'XGBoost':
+                classes = np.unique(y_train)
+                cw = compute_class_weight('balanced', classes=classes, y=y_train)
+                sample_weights = np.array([cw[list(classes).index(v)] for v in y_train])
+                model_clone.fit(X_train_scaled, y_train, sample_weight=sample_weights)
+            else:
+                model_clone.fit(X_train_scaled, y_train)
+            preds[i] = model_clone.predict(X_test_scaled)[0]
+        preds_orig = le.inverse_transform(preds)
+        y_orig = le.inverse_transform(y)
+        acc = np.mean(preds_orig == y_orig)
+        results[name] = {'predictions': preds_orig, 'accuracy': acc}
+
+    return results
