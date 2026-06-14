@@ -2,6 +2,11 @@ import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 from py_pcha import PCHA
+from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
+from xgboost import XGBClassifier
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.utils.class_weight import compute_class_weight
 
 
 def _normalize_column_names(df):
@@ -78,10 +83,7 @@ def compute_archetype_probabilities(pca_coords, archetypes):
 
 
 def predict_archetype_loocv(df, metadata_cols):
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.neural_network import MLPClassifier
-    from xgboost import XGBClassifier
-    from sklearn.preprocessing import LabelEncoder, StandardScaler
+    from sklearn.model_selection import LeaveOneOut
     from sklearn.utils.class_weight import compute_class_weight
 
     feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype']
@@ -97,14 +99,14 @@ def predict_archetype_loocv(df, metadata_cols):
                                  objective='multi:softmax', num_class=len(le.classes_)),
     }
 
+    loo = LeaveOneOut()
     results = {}
     for name, model in models.items():
         preds = np.empty(n, dtype=int)
-        scaler = StandardScaler()
-        for i in range(n):
-            X_train = np.delete(X, i, axis=0)
-            y_train = np.delete(y, i, axis=0)
-            X_test = X[i:i+1]
+        for train_idx, test_idx in loo.split(X):
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train = y[train_idx]
+            scaler = StandardScaler()
             X_train_scaled = scaler.fit_transform(X_train)
             X_test_scaled = scaler.transform(X_test)
             model_clone = model.__class__(**model.get_params())
@@ -120,10 +122,27 @@ def predict_archetype_loocv(df, metadata_cols):
                 model_clone.fit(X_train_scaled, y_train, sample_weight=sample_weights)
             else:
                 model_clone.fit(X_train_scaled, y_train)
-            preds[i] = model_clone.predict(X_test_scaled)[0]
+            preds[test_idx[0]] = model_clone.predict(X_test_scaled)[0]
         preds_orig = le.inverse_transform(preds)
         y_orig = le.inverse_transform(y)
         acc = np.mean(preds_orig == y_orig)
         results[name] = {'predictions': preds_orig, 'accuracy': acc}
 
     return results
+
+
+def select_top_per_archetype(table_df):
+    group_keys = ['Experiment', 'sex', 'Hierarchy']
+
+    grouped = table_df.groupby(group_keys)
+    agg = grouped.agg(
+        n_days=('Animal', 'count'),
+        cum_arch1=('Archetype1_prob', 'sum'),
+        cum_arch2=('Archetype2_prob', 'sum'),
+        cum_arch3=('Archetype3_prob', 'sum'),
+    ).reset_index()
+
+    cum_cols = ['cum_arch1', 'cum_arch2', 'cum_arch3']
+    agg['Dominant_archetype'] = agg[cum_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
+
+    return agg

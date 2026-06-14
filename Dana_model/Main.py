@@ -5,7 +5,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score
-from archetype_analysis import compute_pca, sample_and_fit_archetypes, apply_pca_transform, compute_archetype_probabilities, assign_to_nearest_vertex, predict_archetype_loocv
+from archetype_analysis import compute_pca, sample_and_fit_archetypes, apply_pca_transform, compute_archetype_probabilities, assign_to_nearest_vertex, predict_archetype_loocv, select_top_per_archetype
 import os
 import openpyxl
 
@@ -26,6 +26,7 @@ def main():
     hormones_df = pd.read_excel(f'{directory_path}/{hormones}')
     #=========
     min_per_vertex = 40  #with all the data
+    plot_mean_data = False  #set False to hide mean PCA points on the triangle plot
     #do pca on all data to get the coordinates for the archetype fitting
     pca_model, all_pca_coords, behavior_cols = compute_pca(behavior_every_day_df)
 
@@ -55,7 +56,8 @@ def main():
             iteration += 1
             ax_tri.clear()
             ax_tri.scatter(all_pca_coords[:, 0], all_pca_coords[:, 1], alpha=0.4, s=20, c='steelblue', label='Every day')
-            ax_tri.scatter(mean_pca_coords[:, 0], mean_pca_coords[:, 1], alpha=0.7, s=40, c='orange', marker='s', label='Mean')
+            if plot_mean_data:
+                ax_tri.scatter(mean_pca_coords[:, 0], mean_pca_coords[:, 1], alpha=0.7, s=40, c='orange', marker='s', label='Mean')
 
             tri_x = [archetypes[0, 0], archetypes[1, 0], archetypes[2, 0], archetypes[0, 0]]
             tri_y = [archetypes[0, 1], archetypes[1, 1], archetypes[2, 1], archetypes[0, 1]]
@@ -81,19 +83,25 @@ def main():
                   f'Counts per vertex: {counts}')
 
             # Compute probability table for this iteration (in memory)
-            prob_coeffs = compute_archetype_probabilities(mean_pca_coords, archetypes)
-            table_df = behavior_mean_df[metadata_cols].copy()
-            table_df['PC1'] = mean_pca_coords[:, 0]
-            table_df['PC2'] = mean_pca_coords[:, 1]
+            prob_coeffs = compute_archetype_probabilities(all_pca_coords, archetypes)
+            table_df = behavior_every_day_df[metadata_cols].copy()
+            table_df['PC1'] = all_pca_coords[:, 0]
+            table_df['PC2'] = all_pca_coords[:, 1]
             table_df['Archetype1_prob'] = prob_coeffs[:, 0]
             table_df['Archetype2_prob'] = prob_coeffs[:, 1]
             table_df['Archetype3_prob'] = prob_coeffs[:, 2]
             prob_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
             table_df['Dominant_archetype'] = table_df[prob_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
             tables.append(table_df)
-            # Merge dominant archetype with hormones
-            merge_cols = list(set(behavior_mean_df.columns) & set(hormones_df.columns))
-            hormones_arch = hormones_df.merge(table_df[merge_cols + ['Dominant_archetype']], on=merge_cols, how='left')
+            # Select all rows per dominant archetype, no duplicate metadata
+            top_df = select_top_per_archetype(table_df)
+            # Concatenate top_df with hormones
+            hormones_arch = top_df.merge(
+                hormones_df.drop_duplicates(subset=['Experiment', 'sex', 'Hierarchy']),
+                on=['Experiment', 'sex', 'Hierarchy'], how='inner'
+            )
+            drop_cols = ['n_days', 'cum_arch1', 'cum_arch2', 'cum_arch3']
+            hormones_arch = hormones_arch.drop(columns=[c for c in drop_cols if c in hormones_arch.columns])
             # LOOCV prediction
             loocv_results = predict_archetype_loocv(hormones_arch, metadata_cols)
             for mname, mres in loocv_results.items():
