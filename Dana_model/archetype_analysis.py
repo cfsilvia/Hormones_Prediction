@@ -11,6 +11,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from scipy.optimize import linear_sum_assignment
 from sklearn.model_selection import LeaveOneOut
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.model_selection import GridSearchCV
 
 
 def _normalize_column_names(df):
@@ -95,12 +96,11 @@ def predict_archetype_loocv(df, metadata_cols):
     n = len(df)
 
     models = {
-        'LogReg': LogisticRegression(max_iter=2000, random_state=0, class_weight='balanced'),
-        'SVM': SVC(kernel='linear', random_state=0, class_weight='balanced', max_iter=2000),
-        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(50,), alpha=1.0, random_state=0),
-        'XGBoost': XGBClassifier(n_estimators=50, max_depth=2, subsample=0.8, colsample_bytree=0.8,
-                                 random_state=1, eval_metric='mlogloss', objective='multi:softmax',
-                                 num_class=len(le.classes_)),
+        'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
+        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=2000, probability=True),
+        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
+        'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
+                                 eval_metric='mlogloss', objective='multi:softmax', num_class=len(le.classes_)),
     }
 
     loo = LeaveOneOut()

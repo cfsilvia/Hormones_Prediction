@@ -5,7 +5,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score
-from archetype_analysis import compute_pca, sample_and_fit_archetypes, apply_pca_transform, compute_archetype_probabilities, assign_to_nearest_vertex, predict_archetype_loocv, select_top_per_archetype
+from archetype_analysis import compute_pca, sample_and_fit_archetypes, compute_archetype_probabilities, assign_to_nearest_vertex, predict_archetype_loocv, select_top_per_archetype
 import os
 import openpyxl
 
@@ -17,21 +17,15 @@ def main():
     #====================
     directory_path = r'U:\Users\Silvia\RutiFrishman_2025_hormones_paper\Personality_Prediction_March_2026\June_pareto_all_data\Dana_model\data_to_use'
     behavior_every_day_file = 'Behavior_every_day.xlsx'
-    behavior_mean_file = 'Behavior_mean_per_day.xlsx'
     hormones = 'Hormones.xlsx'
     #=========
     # Load the data 
     behavior_every_day_df = pd.read_excel(f'{directory_path}/{behavior_every_day_file}')
-    behavior_mean_df = pd.read_excel(f'{directory_path}/{behavior_mean_file}')
     hormones_df = pd.read_excel(f'{directory_path}/{hormones}')
     #=========
     min_per_vertex = 40  #with all the data
-    plot_mean_data = False  #set False to hide mean PCA points on the triangle plot
     #do pca on all data to get the coordinates for the archetype fitting
     pca_model, all_pca_coords, behavior_cols = compute_pca(behavior_every_day_df)
-
-    # Apply PCA to behavior_mean_df before the loop
-    mean_pca_coords = apply_pca_transform(pca_model, behavior_mean_df, behavior_cols)
     metadata_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']
 
     plt.ion()
@@ -59,19 +53,17 @@ def main():
             iteration += 1
             ax_tri.clear()
             ax_tri.scatter(all_pca_coords[:, 0], all_pca_coords[:, 1], alpha=0.4, s=20, c='steelblue', label='Every day')
-            if plot_mean_data:
-                ax_tri.scatter(mean_pca_coords[:, 0], mean_pca_coords[:, 1], alpha=0.7, s=40, c='orange', marker='s', label='Mean')
 
             tri_x = [archetypes[0, 0], archetypes[1, 0], archetypes[2, 0], archetypes[0, 0]]
             tri_y = [archetypes[0, 1], archetypes[1, 1], archetypes[2, 1], archetypes[0, 1]]
             ax_tri.plot(tri_x, tri_y, 'k-', linewidth=2, label='Archetype triangle')
-            ax_tri.scatter(archetypes[:, 0], archetypes[:, 1], c='r', s=100, marker='^', zorder=5)
-
-            mean_counts = assign_to_nearest_vertex(mean_pca_coords, archetypes)
+            colors = ['red', 'green', 'orange']
             for v in range(3):
-                ax_tri.annotate(f'every: {counts[v]}  mean: {mean_counts[v]}',
-                                archetypes[v], textcoords='offset points',
-                                xytext=(0, 12), ha='center', fontsize=8, color='red')
+                ax_tri.scatter(archetypes[v, 0], archetypes[v, 1], c=colors[v], s=120, marker='^', zorder=5)
+                ax_tri.annotate(str(v + 1), archetypes[v], textcoords='offset points',
+                                xytext=(0, 12), ha='center', fontsize=10, color=colors[v], fontweight='bold')
+                ax_tri.annotate(f'every: {counts[v]}', archetypes[v], textcoords='offset points',
+                                xytext=(0, -14), ha='center', fontsize=8, color='red')
 
             ax_tri.set_xlabel('PC1')
             ax_tri.set_ylabel('PC2')
@@ -121,8 +113,9 @@ def main():
                 per_class_f1.append(f1_per)
                 ConfusionMatrixDisplay.from_predictions(
                     hormones_arch['Dominant_archetype'], mres['predictions'],
-                    display_labels=[1, 2, 3], ax=ax, colorbar=False,
-                    cmap='Blues', text_kw={'fontsize': 8},
+                    display_labels=[1, 2, 3], ax=ax,
+                    normalize='true', values_format='.0%', cmap='Blues',
+                    colorbar=False, text_kw={'fontsize': 9},
                 )
                 ax.set_title(f'{mname}  acc={mres["accuracy"]:.3f}  F1={f1_macro:.3f}', fontsize=10)
             # Save only if all three per-class F1 are above 0.4
