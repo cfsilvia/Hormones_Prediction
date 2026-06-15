@@ -5,14 +5,13 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score
-from archetype_analysis import compute_pca, sample_and_fit_archetypes, apply_pca_transform, compute_archetype_probabilities, assign_to_nearest_vertex, predict_archetype_loocv, select_top_per_archetype, select_top_per_archetype_dominant
+from archetype_analysis import compute_pca, sample_and_fit_archetypes, apply_pca_transform, compute_archetype_probabilities, assign_to_nearest_vertex, predict_archetype_loocv, select_top_per_archetype
 import os
 import openpyxl
 
 
 
 def main():
-    
     #=========
     #User input
     #====================
@@ -51,7 +50,6 @@ def main():
     tables = []
     best_f1 = 0.48
     best_iter = 0
-    if_dominant_archetype = False
 
     while iteration < 50:
         attempts += 1
@@ -99,11 +97,7 @@ def main():
             table_df['Dominant_archetype'] = table_df[prob_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
             tables.append(table_df)
             # Select all rows per dominant archetype, no duplicate metadata
-            if if_dominant_archetype:
-                top_df = select_top_per_archetype_dominant(table_df)
-            else:
-                top_df = select_top_per_archetype(table_df, archetypes)
-                
+            top_df = select_top_per_archetype(table_df, archetypes)
             # Concatenate top_df with hormones
             hormones_arch = top_df.merge(
                 hormones_df.drop_duplicates(subset=['Experiment', 'sex', 'Hierarchy']),
@@ -133,7 +127,7 @@ def main():
                 ax.set_title(f'{mname}  acc={mres["accuracy"]:.3f}  F1={f1_macro:.3f}', fontsize=10)
             # Save only if all three per-class F1 are above 0.4
             avg_f1_per = np.mean(per_class_f1, axis=0)
-            if np.max(f1_scores) > 0.48:
+            if np.all(avg_f1_per > 0.4):
                 mean_f1 = np.max(f1_scores)
                 best_iter = iteration
                 fname = f'best_f1_{mean_f1:.3f}_f1-1_{avg_f1_per[0]:.3f}_f1-2_{avg_f1_per[1]:.3f}_f1-3_{avg_f1_per[2]:.3f}_iter{iteration}.pdf'

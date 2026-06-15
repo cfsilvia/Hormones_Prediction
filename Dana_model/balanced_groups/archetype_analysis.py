@@ -9,8 +9,6 @@ from xgboost import XGBClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.utils.class_weight import compute_class_weight
 from scipy.optimize import linear_sum_assignment
-from sklearn.model_selection import LeaveOneOut
-from sklearn.utils.class_weight import compute_class_weight
 
 
 def _normalize_column_names(df):
@@ -87,8 +85,10 @@ def compute_archetype_probabilities(pca_coords, archetypes):
 
 
 def predict_archetype_loocv(df, metadata_cols):
-    
-    feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
+    from sklearn.model_selection import LeaveOneOut
+    from sklearn.utils.class_weight import compute_class_weight
+
+    feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype']
     X = df[feature_cols].select_dtypes(include=[np.number]).values
     le = LabelEncoder()
     y = le.fit_transform(df['Dominant_archetype'].values)
@@ -138,7 +138,7 @@ def predict_archetype_loocv(df, metadata_cols):
 
 
 def select_top_per_archetype(table_df, archetypes=None, n_per_arch=20):
-   
+    
 
     group_keys = ['Experiment', 'sex', 'Hierarchy']
 
@@ -175,21 +175,5 @@ def select_top_per_archetype(table_df, archetypes=None, n_per_arch=20):
 
         agg = agg.iloc[row_ind].copy()
         agg['Dominant_archetype'] = selected_archetypes + 1
-
-    return agg
-
-def select_top_per_archetype_dominant(table_df):
-    group_keys = ['Experiment', 'sex', 'Hierarchy']
-
-    grouped = table_df.groupby(group_keys)
-    agg = grouped.agg(
-        n_days=('Animal', 'count'),
-        cum_arch1=('Archetype1_prob', 'sum'),
-        cum_arch2=('Archetype2_prob', 'sum'),
-        cum_arch3=('Archetype3_prob', 'sum'),
-    ).reset_index()
-
-    cum_cols = ['cum_arch1', 'cum_arch2', 'cum_arch3']
-    agg['Dominant_archetype'] = agg[cum_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
 
     return agg
