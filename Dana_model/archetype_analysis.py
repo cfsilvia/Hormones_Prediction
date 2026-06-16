@@ -52,7 +52,7 @@ def apply_pca_transform(pca, data_df, behavior_cols):
     return pca.transform(behavior_data)
 
 
-def sample_and_fit_archetypes(pca_coords_all, sample_frac=0.8):
+def sample_and_fit_archetypes(pca_coords_all, sample_frac=0.7):
     n = pca_coords_all.shape[0]
     n_sample = max(int(n * sample_frac), 3)
     sample_indices = np.random.choice(n, n_sample, replace=False)
@@ -64,7 +64,7 @@ def sample_and_fit_archetypes(pca_coords_all, sample_frac=0.8):
 
     counts = assign_to_nearest_vertex(pca_coords_all, archetypes)
 
-    return pca_coords, archetypes, varexlp, counts
+    return pca_coords, archetypes, varexlp, counts, sample_indices
 
 
 def compute_archetype_probabilities(pca_coords, archetypes):
@@ -97,7 +97,7 @@ def predict_archetype_loocv(df, metadata_cols):
 
     models = {
         'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
-        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=2000, probability=True),
+        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=2000),
         'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
         'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
                                  eval_metric='mlogloss', objective='multi:softmax', num_class=len(le.classes_)),
