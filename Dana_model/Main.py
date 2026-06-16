@@ -41,7 +41,7 @@ def main():
         pca_coords, archetypes, varexlp, counts, sample_indices = sample_and_fit_archetypes(all_pca_coords)
         idx_tuple = tuple(sorted(sample_indices))
         if idx_tuple in seen_indices:
-            print(f'  WARNING: Duplicate sample on attempt {attempts}')
+            continue
         seen_indices.add(idx_tuple)
 
         if all(c >= min_per_vertex for c in counts):

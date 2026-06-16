@@ -64,7 +64,7 @@ def sample_and_fit_archetypes(pca_coords_all, sample_frac=0.7):
 
     counts = assign_to_nearest_vertex(pca_coords_all, archetypes)
 
-    return pca_coords, archetypes, varexlp, counts, sample_indices
+    return pca_coords, archetypes, varexlp, counts
 
 
 def compute_archetype_probabilities(pca_coords, archetypes):
