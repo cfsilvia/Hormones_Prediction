@@ -5,7 +5,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from archetype_analysis import compute_pca, sample_and_fit_archetypes, compute_archetype_probabilities, predict_archetype_loocv, select_top_per_archetype
 from alignment.label_alignment import get_alignment_mapping, apply_mapping, accumulate_results, compute_aggregate_confusion
-from plot_utils import setup_figure, draw_triangle, plot_confusion_matrices, save_if_best, plot_aggregate_confusion
+from plot_utils import setup_figure, draw_triangle, plot_confusion_matrices, save_if_best, plot_aggregate_confusion, plot_permutation_tests
 import os
 import openpyxl
 
@@ -23,7 +23,7 @@ def main():
     metadata_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']
 
     plt.ion()
-    fig, ax_tri, cm_axes = setup_figure()
+    fig, ax_tri, cm_axes, perm_axes = setup_figure()
 
     iteration = 0
     attempts = 0
@@ -40,7 +40,7 @@ def main():
         pca_coords, archetypes, varexlp, counts, sample_indices = sample_and_fit_archetypes(all_pca_coords)
         idx_tuple = tuple(sorted(sample_indices))
         if idx_tuple in seen_indices:
-            print(f'  WARNING: Duplicate sample on attempt {attempts}')
+            continue
         seen_indices.add(idx_tuple)
 
         if all(c >= min_per_vertex for c in counts):
@@ -84,6 +84,8 @@ def main():
                 print(f'  {mname} LOOCV accuracy: {mres["accuracy"]:.3f}')
 
             f1_scores, per_class_f1 = plot_confusion_matrices(cm_axes, loocv_results, hormones_arch['Dominant_archetype'])
+
+            plot_permutation_tests(perm_axes, loocv_results, hormones_arch['Dominant_archetype'])
 
             saved = save_if_best(fig, directory_path, f1_scores, per_class_f1, iteration)
             if saved:

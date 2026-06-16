@@ -6,14 +6,16 @@ import os
 
 
 def setup_figure(n_models=4):
-    fig = plt.figure(figsize=(26, 6))
-    gs = GridSpec(1, n_models + 1, figure=fig)
-    ax_tri = fig.add_subplot(gs[0, 0])
+    fig = plt.figure(figsize=(26, 10))
+    gs = GridSpec(2, n_models + 1, figure=fig, height_ratios=[1, 1])
+    ax_tri = fig.add_subplot(gs[:, 0])
     model_names = ['LogReg', 'SVM', 'MLP', 'XGBoost'][:n_models]
     cm_axes = {}
+    perm_axes = {}
     for i, name in enumerate(model_names):
         cm_axes[name] = fig.add_subplot(gs[0, i + 1])
-    return fig, ax_tri, cm_axes
+        perm_axes[name] = fig.add_subplot(gs[1, i + 1])
+    return fig, ax_tri, cm_axes, perm_axes
 
 
 def draw_triangle(ax, all_pca_coords, archetypes, counts, varexlp, iteration, attempts,
@@ -111,52 +113,45 @@ def plot_aggregate_confusion(agg_confusion, directory_path, model_names=None):
     plt.close(fig)
 
 
-def permutation_test_significance(y_true, y_pred, n_permutations=1000, metric='accuracy'):
-    
-    if metric == 'accuracy':
-        observed = accuracy_score(y_true, y_pred)
-        score_func = accuracy_score
-    elif metric == 'f1_macro':
-        observed = f1_score(y_true, y_pred, average='macro')
-        score_func = lambda yt, yp: f1_score(yt, yp, average='macro')
-    else:
-        raise ValueError(f"Unknown metric: {metric}")
-    
-    n = len(y_true)
-    null_scores = np.zeros(n_permutations)
-    for i in range(n_permutations):
-        y_shuffled = np.random.permutation(y_true)
-        null_scores[i] = score_func(y_shuffled, y_pred)
-    
-    p_value = (np.sum(null_scores >= observed) + 1) / (n_permutations + 1)
+def permutation_test_significance(y_true, y_pred, n_permutations=1000):
+    from sklearn.metrics import make_scorer
+    from sklearn.model_selection import permutation_test_score
+    from sklearn.base import BaseEstimator, ClassifierMixin
+
+    class _FixedPredictor(BaseEstimator, ClassifierMixin):
+        def fit(self, X, y):
+            return self
+        def predict(self, X):
+            return y_pred
+        def score(self, X, y):
+            return f1_score(y, y_pred, average='macro')
+
+    observed = f1_score(y_true, y_pred, average='macro')
+    X_dummy = np.zeros((len(y_true), 1))
+    _, null_scores, p_value = permutation_test_score(
+        _FixedPredictor(), X_dummy, y_true,
+        cv=[(slice(None), slice(None))],
+        n_permutations=n_permutations,
+        scoring=make_scorer(f1_score, average='macro'),
+    )
     return observed, null_scores, p_value
 
 
-def plot_permutation_tests(cm_axes, loocv_results, y_true, n_permutations=1000):
-    n_models = len(loocv_results)
-    fig, axes = plt.subplots(2, n_models, figsize=(5 * n_models, 8))
-    if n_models == 1:
-        axes = axes.reshape(2, 1)
-    
-    for idx, (mname, mres) in enumerate(loocv_results.items()):
-        y_pred = mres['predictions']
+def plot_permutation_tests(perm_axes, loocv_results, y_true, n_permutations=1000):
+    for mname, mres in loocv_results.items():
+        ax = perm_axes[mname]
+        ax.clear()
+        observed, null_scores, p_val = permutation_test_significance(
+            y_true, mres['predictions'], n_permutations)
         
-        for row, metric in enumerate(['accuracy', 'f1_macro']):
-            ax = axes[row, idx]
-            observed, null_scores, p_val = permutation_test_significance(
-                y_true, y_pred, n_permutations, metric)
-            
-            ax.hist(null_scores, bins=30, alpha=0.7, color='gray', edgecolor='black', density=True)
-            ax.axvline(observed, color='red', linewidth=2, label=f'Observed: {observed:.3f}')
-            ax.axvline(np.percentile(null_scores, 95), color='orange', linestyle='--', label='95th percentile')
-            ax.set_xlabel(metric.capitalize())
-            ax.set_ylabel('Density')
-            ax.set_title(f'{mname} - {metric}\np={p_val:.4f}', fontsize=10)
-            ax.legend(fontsize=8)
-            ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    return fig
+        ax.hist(null_scores, bins=30, alpha=0.7, color='gray', edgecolor='black', density=True)
+        ax.axvline(observed, color='red', linewidth=2, label=f'Observed: {observed:.3f}')
+        ax.axvline(np.percentile(null_scores, 95), color='orange', linestyle='--', label='95th percentile')
+        ax.set_xlabel('F1 macro')
+        ax.set_ylabel('Density')
+        ax.set_title(f'{mname}\np={p_val:.4f}', fontsize=8)
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
 
 
 def save_if_best(fig, directory_path, f1_scores, per_class_f1, iteration, threshold=0.48):
