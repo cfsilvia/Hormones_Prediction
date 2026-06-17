@@ -96,9 +96,8 @@ def plot_aggregate_confusion(agg_confusion, directory_path, model_names=None):
         axes = [axes]
     for ax, mname in zip(axes, model_names):
         cm = agg_confusion[mname]
-        cm_normalized = cm.astype('float') / cm.sum(axis=1, keepdims=True)
-        ConfusionMatrixDisplay(cm_normalized, display_labels=[1, 2, 3]).plot(
-            ax=ax, cmap='Blues', values_format='.0%', colorbar=False, text_kw={'fontsize': 9})
+        ConfusionMatrixDisplay(cm, display_labels=[1, 2, 3]).plot(
+            ax=ax, cmap='Blues', values_format='d', colorbar=False, text_kw={'fontsize': 9})
         acc, f1_macro, f1_per = _f1_from_cm(cm)
         subtitle = f'acc={acc:.3f}  F1={f1_macro:.3f}'
         for k, f1k in enumerate(f1_per):
@@ -152,6 +151,104 @@ def plot_permutation_tests(perm_axes, loocv_results, y_true, n_permutations=1000
         ax.set_title(f'{mname}\np={p_val:.4f}', fontsize=8)
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
+
+'''
+ aggregate permutation test
+'''
+def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_permutations=1000):
+    model_names = list(all_preds_by_model[0].keys())
+    n = len(model_names)
+
+    combined = {}
+    for mname in model_names:
+        yt = np.concatenate(all_true)
+        yp = np.concatenate([entry[mname] for entry in all_preds_by_model])
+        combined[mname] = permutation_test_significance(yt, yp, n_permutations)
+
+    
+    agg_confusion = compute_aggregate_confusion(all_true, all_preds_by_model)
+    
+    fig, axes = plt.subplots(2, n, figsize=(5 * n, 8))
+    if n == 1:
+        axes = axes.reshape(2, 1)
+
+    for idx, mname in enumerate(model_names):
+        ax_cm = axes[0, idx]
+        cm = agg_confusion[mname]
+        cm_norm = cm.astype('float') / cm.sum(axis=1, keepdims=True)
+        ConfusionMatrixDisplay(cm_norm, display_labels=[1, 2, 3]).plot(
+            ax=ax_cm, cmap='Blues', values_format='.0%', colorbar=False, text_kw={'fontsize': 9})
+        acc, f1_macro, f1_per = _f1_from_cm(cm)
+        subtitle = f'acc={acc:.3f}  F1={f1_macro:.3f}'
+        for k, f1k in enumerate(f1_per):
+            subtitle += f'  F1_{k+1}={f1k:.3f}'
+        ax_cm.set_title(f'{mname} — aggregate', fontsize=10)
+        ax_cm.text(0.5, -0.2, subtitle, transform=ax_cm.transAxes, ha='center', fontsize=8)
+
+        ax_perm = axes[1, idx]
+        observed, null_scores, p_val = combined[mname]
+        ax_perm.hist(null_scores, bins=30, alpha=0.7, color='gray', edgecolor='black', density=True)
+        ax_perm.axvline(observed, color='red', linewidth=2, label=f'Observed: {observed:.3f}')
+        ax_perm.axvline(np.percentile(null_scores, 95), color='orange', linestyle='--', label='95th percentile')
+        ax_perm.set_xlabel('F1 macro')
+        ax_perm.set_ylabel('Density')
+        ax_perm.set_title(f'{mname}\np={p_val:.4f}', fontsize=10)
+        ax_perm.legend(fontsize=8)
+        ax_perm.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    fname = 'aggregate_permutation.pdf'
+    save_path = os.path.join(directory_path, fname)
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f'  Saved aggregate permutation test: {fname}')
+    plt.close(fig)
+
+
+def compute_shap_values(model, X, model_name):
+    
+    if model_name == 'XGBoost':
+        explainer = shap.TreeExplainer(model)
+        return explainer.shap_values(X)
+    else:
+        background = X[np.random.choice(X.shape[0], min(20, X.shape[0]), replace=False)]
+        explainer = shap.KernelExplainer(model.predict_proba, background)
+        return explainer.shap_values(X)
+
+
+def plot_shap_feature_importance(ax, shap_values, feature_names, model_name, top_n=10):
+    if isinstance(shap_values, list):
+        shap_values = np.array(shap_values).transpose(1, 2, 0)
+    if shap_values.ndim == 3:
+        mean_shap = np.mean(np.abs(shap_values), axis=(0, 2))
+    else:
+        mean_shap = np.mean(np.abs(shap_values), axis=0)
+    top_idx = np.argsort(mean_shap)[-top_n:]
+    ax.barh(range(top_n), mean_shap[top_idx], color='steelblue')
+    ax.set_yticks(range(top_n))
+    ax.set_yticklabels([feature_names[i] for i in top_idx], fontsize=7)
+    ax.set_xlabel('mean |SHAP|')
+    ax.set_title(f'{model_name} — Top features', fontsize=9)
+    ax.invert_yaxis()
+    ax.grid(True, alpha=0.3, axis='x')
+
+
+def plot_shap_summary_violin(ax, shap_values, feature_names, model_name, top_n=10):
+    if isinstance(shap_values, list):
+        shap_values = np.array(shap_values).transpose(1, 2, 0)
+    if shap_values.ndim == 3:
+        shap_2d = np.mean(np.abs(shap_values), axis=2)
+    else:
+        shap_2d = shap_values.copy()
+    mean_shap = np.mean(np.abs(shap_2d), axis=0)
+    top_idx = np.argsort(mean_shap)[-top_n:]
+    data = [shap_2d[:, i] for i in reversed(top_idx)]
+    parts = ax.violinplot(data, vert=False, positions=range(top_n), showmeans=True)
+    ax.set_yticks(range(top_n))
+    ax.set_yticklabels([feature_names[i] for i in reversed(top_idx)], fontsize=7)
+    ax.axvline(0, color='gray', linestyle='--', alpha=0.5)
+    ax.set_xlabel('SHAP value')
+    ax.set_title(f'{model_name} — SHAP violin', fontsize=9)
+    ax.grid(True, alpha=0.3, axis='x')
 
 
 def save_if_best(fig, directory_path, f1_scores, per_class_f1, iteration, threshold=0.48):

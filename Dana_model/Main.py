@@ -5,7 +5,8 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from archetype_analysis import compute_pca, sample_and_fit_archetypes, compute_archetype_probabilities, assign_to_nearest_vertex, predict_archetype_loocv, select_top_per_archetype, select_top_per_archetype_dominant
 from alignment.label_alignment import get_alignment_mapping, apply_mapping, accumulate_results, compute_aggregate_confusion
-from plot_utils import setup_figure, draw_triangle, plot_confusion_matrices, save_if_best, plot_aggregate_confusion, plot_permutation_tests
+from plot_utils import setup_figure, draw_triangle, plot_confusion_matrices, save_if_best, plot_aggregate_confusion, plot_permutation_tests, plot_aggregate_permutation
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 import os
 import openpyxl
 
@@ -35,9 +36,13 @@ def main():
     all_true = []
     all_preds_by_model = []
     seen_indices = set()
+    iteration_metrics = []
+    aggregated_shap = {}
+    shap_iter_count = 0
 
     while iteration < 50:
         attempts += 1
+        # Sample and fit archetypes
         pca_coords, archetypes, varexlp, counts, sample_indices = sample_and_fit_archetypes(all_pca_coords)
         idx_tuple = tuple(sorted(sample_indices))
         if idx_tuple in seen_indices:
@@ -102,6 +107,7 @@ def main():
 
     agg_confusion = compute_aggregate_confusion(all_true, all_preds_by_model)
     plot_aggregate_confusion(agg_confusion, directory_path)
+    plot_aggregate_permutation(all_true, all_preds_by_model, directory_path)
 
     plt.ioff()
     plt.show()
