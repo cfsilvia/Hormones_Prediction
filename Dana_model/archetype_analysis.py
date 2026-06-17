@@ -88,35 +88,43 @@ def compute_archetype_probabilities(pca_coords, archetypes):
 
 
 def predict_archetype_loocv(df, metadata_cols):
-    
     feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
     X = df[feature_cols].select_dtypes(include=[np.number]).values
     le = LabelEncoder()
     y = le.fit_transform(df['Dominant_archetype'].values)
     n = len(df)
+    n_features = X.shape[1]
+    n_classes = len(le.classes_)
 
     models = {
         'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
-        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=2000),
+        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000),
         'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
         'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
-                                 eval_metric='mlogloss', objective='multi:softmax', num_class=len(le.classes_)),
+                                 eval_metric='mlogloss', objective='multi:softmax', num_class=n_classes),
     }
 
     loo = LeaveOneOut()
     results = {}
+   
+
     for name, model in models.items():
         preds = np.empty(n, dtype=int)
+       
+
         for train_idx, test_idx in loo.split(X):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train = y[train_idx]
             model_clone = model.__class__(**model.get_params())
+
             if name == 'XGBoost':
                 classes = np.unique(y_train)
                 cw = compute_class_weight('balanced', classes=classes, y=y_train)
                 sample_weights = np.array([cw[list(classes).index(v)] for v in y_train])
                 model_clone.fit(X_train, y_train, sample_weight=sample_weights)
                 preds[test_idx[0]] = model_clone.predict(X_test)[0]
+
+               
             else:
                 scaler = StandardScaler()
                 X_train_scaled = scaler.fit_transform(X_train)
@@ -129,11 +137,15 @@ def predict_archetype_loocv(df, metadata_cols):
                 else:
                     model_clone.fit(X_train_scaled, y_train)
                 preds[test_idx[0]] = model_clone.predict(X_test_scaled)[0]
+
+               
+
         preds_orig = le.inverse_transform(preds)
         y_orig = le.inverse_transform(y)
         acc = np.mean(preds_orig == y_orig)
         results[name] = {'predictions': preds_orig, 'accuracy': acc}
 
+      
     return results
 
 

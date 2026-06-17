@@ -95,7 +95,7 @@ def predict_archetype_loocv(df, metadata_cols):
 
     models = {
         'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
-        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=2000),
+        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000),
         'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
         'XGBoost': XGBClassifier(n_estimators=50, max_depth=3, learning_rate=0.1, random_state=0,
                                  eval_metric='mlogloss', objective='multi:softmax', num_class=len(le.classes_)),

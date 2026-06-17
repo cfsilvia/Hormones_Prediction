@@ -1,20 +1,30 @@
+from xml.parsers.expat import model
+from sklearn.metrics import make_scorer
+from sklearn.model_selection import permutation_test_score
+from sklearn.base import BaseEstimator, ClassifierMixin
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score
 import os
+from alignment.label_alignment import compute_aggregate_confusion
+from sklearn.metrics import ConfusionMatrixDisplay, f1_score
+import shap
 
 
 def setup_figure(n_models=4):
-    fig = plt.figure(figsize=(26, 10))
+    fig = plt.figure(figsize=(26, 14))
     gs = GridSpec(2, n_models + 1, figure=fig, height_ratios=[1, 1])
     ax_tri = fig.add_subplot(gs[:, 0])
     model_names = ['LogReg', 'SVM', 'MLP', 'XGBoost'][:n_models]
     cm_axes = {}
     perm_axes = {}
+    shap_imp_axes = {}
     for i, name in enumerate(model_names):
         cm_axes[name] = fig.add_subplot(gs[0, i + 1])
         perm_axes[name] = fig.add_subplot(gs[1, i + 1])
+       
     return fig, ax_tri, cm_axes, perm_axes
 
 
@@ -113,10 +123,7 @@ def plot_aggregate_confusion(agg_confusion, directory_path, model_names=None):
 
 
 def permutation_test_significance(y_true, y_pred, n_permutations=1000):
-    from sklearn.metrics import make_scorer
-    from sklearn.model_selection import permutation_test_score
-    from sklearn.base import BaseEstimator, ClassifierMixin
-
+    
     class _FixedPredictor(BaseEstimator, ClassifierMixin):
         def fit(self, X, y):
             return self
@@ -127,9 +134,7 @@ def permutation_test_significance(y_true, y_pred, n_permutations=1000):
 
     observed = f1_score(y_true, y_pred, average='macro')
     X_dummy = np.zeros((len(y_true), 1))
-    _, null_scores, p_value = permutation_test_score(
-        _FixedPredictor(), X_dummy, y_true,
-        cv=[(slice(None), slice(None))],
+    _, null_scores, p_value = permutation_test_score(_FixedPredictor(), X_dummy, y_true,cv=[(slice(None), slice(None))],
         n_permutations=n_permutations,
         scoring=make_scorer(f1_score, average='macro'),
     )
@@ -137,11 +142,13 @@ def permutation_test_significance(y_true, y_pred, n_permutations=1000):
 
 
 def plot_permutation_tests(perm_axes, loocv_results, y_true, n_permutations=1000):
+    pvalues = {}
     for mname, mres in loocv_results.items():
         ax = perm_axes[mname]
         ax.clear()
         observed, null_scores, p_val = permutation_test_significance(
             y_true, mres['predictions'], n_permutations)
+        pvalues[mname] = p_val
         
         ax.hist(null_scores, bins=30, alpha=0.7, color='gray', edgecolor='black', density=True)
         ax.axvline(observed, color='red', linewidth=2, label=f'Observed: {observed:.3f}')
@@ -151,6 +158,7 @@ def plot_permutation_tests(perm_axes, loocv_results, y_true, n_permutations=1000
         ax.set_title(f'{mname}\np={p_val:.4f}', fontsize=8)
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
+    return pvalues
 
 '''
  aggregate permutation test
@@ -206,13 +214,49 @@ def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_p
 
 def compute_shap_values(model, X, model_name):
     
-    if model_name == 'XGBoost':
-        explainer = shap.TreeExplainer(model)
-        return explainer.shap_values(X)
-    else:
-        background = X[np.random.choice(X.shape[0], min(20, X.shape[0]), replace=False)]
-        explainer = shap.KernelExplainer(model.predict_proba, background)
-        return explainer.shap_values(X)
+        if model_name == 'XGBoost':
+           explainer = shap.TreeExplainer(model)
+        elif model_name in ('LogReg', 'SVM'):
+            explainer = shap.LinearExplainer(model, X)
+        else:
+            explainer = shap.PermutationExplainer(model.predict_proba, X)
+        shap_values = explainer.shap_values(X)
+        return shap_values
+
+
+def train_full_models_and_shap(X_full, y_encoded, feature_cols, shap_imp_axes=None):
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.svm import SVC
+    from sklearn.neural_network import MLPClassifier
+    from xgboost import XGBClassifier
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_full)
+
+    full_models = {
+        'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
+        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000, probability=True),
+        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
+        'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
+                                  eval_metric='mlogloss', objective='multi:softmax', num_class=3),
+    }
+
+    shap_results = {}
+    for mname, model in full_models.items():
+        if mname == 'XGBoost':
+            model.fit(X_full, y_encoded)
+            shap_vals = compute_shap_values(model, X_full, mname)
+        else:
+            model.fit(X_scaled, y_encoded)
+            shap_vals = compute_shap_values(model, X_scaled, mname)
+        shap_results[mname] = shap_vals
+        if shap_imp_axes is not None:
+            plot_shap_feature_importance(shap_imp_axes[mname], shap_vals, feature_cols, mname)
+
+    return shap_results
+
+
 
 
 def plot_shap_feature_importance(ax, shap_values, feature_names, model_name, top_n=10):
@@ -228,7 +272,6 @@ def plot_shap_feature_importance(ax, shap_values, feature_names, model_name, top
     ax.set_yticklabels([feature_names[i] for i in top_idx], fontsize=7)
     ax.set_xlabel('mean |SHAP|')
     ax.set_title(f'{model_name} — Top features', fontsize=9)
-    ax.invert_yaxis()
     ax.grid(True, alpha=0.3, axis='x')
 
 

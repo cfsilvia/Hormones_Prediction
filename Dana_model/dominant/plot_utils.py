@@ -6,14 +6,16 @@ import os
 
 
 def setup_figure(n_models=4):
-    fig = plt.figure(figsize=(26, 6))
-    gs = GridSpec(1, n_models + 1, figure=fig)
-    ax_tri = fig.add_subplot(gs[0, 0])
+    fig = plt.figure(figsize=(26, 10))
+    gs = GridSpec(2, n_models + 1, figure=fig, height_ratios=[1, 1])
+    ax_tri = fig.add_subplot(gs[:, 0])
     model_names = ['LogReg', 'SVM', 'MLP', 'XGBoost'][:n_models]
     cm_axes = {}
+    shap_imp_axes = {}
     for i, name in enumerate(model_names):
         cm_axes[name] = fig.add_subplot(gs[0, i + 1])
-    return fig, ax_tri, cm_axes
+        shap_imp_axes[name] = fig.add_subplot(gs[1, i + 1])
+    return fig, ax_tri, cm_axes, shap_imp_axes
 
 
 def draw_triangle(ax, all_pca_coords, archetypes, counts, varexlp, iteration, attempts,
@@ -94,9 +96,8 @@ def plot_aggregate_confusion(agg_confusion, directory_path, model_names=None):
         axes = [axes]
     for ax, mname in zip(axes, model_names):
         cm = agg_confusion[mname]
-        cm_normalized = cm.astype('float') / cm.sum(axis=1, keepdims=True)
-        ConfusionMatrixDisplay(cm_normalized, display_labels=[1, 2, 3]).plot(
-            ax=ax, cmap='Blues', values_format='.0%', colorbar=False, text_kw={'fontsize': 9})
+        ConfusionMatrixDisplay(cm, display_labels=[1, 2, 3]).plot(
+            ax=ax, cmap='Blues', values_format='d', colorbar=False, text_kw={'fontsize': 9})
         acc, f1_macro, f1_per = _f1_from_cm(cm)
         subtitle = f'acc={acc:.3f}  F1={f1_macro:.3f}'
         for k, f1k in enumerate(f1_per):
@@ -135,14 +136,10 @@ def permutation_test_significance(y_true, y_pred, n_permutations=1000):
     return observed, null_scores, p_value
 
 
-def plot_permutation_tests(cm_axes, loocv_results, y_true, n_permutations=1000):
-    n_models = len(loocv_results)
-    fig, axes = plt.subplots(1, n_models, figsize=(5 * n_models, 4))
-    if n_models == 1:
-        axes = [axes]
-    
-    for idx, (mname, mres) in enumerate(loocv_results.items()):
-        ax = axes[idx]
+def plot_permutation_tests(perm_axes, loocv_results, y_true, n_permutations=1000):
+    for mname, mres in loocv_results.items():
+        ax = perm_axes[mname]
+        ax.clear()
         observed, null_scores, p_val = permutation_test_significance(
             y_true, mres['predictions'], n_permutations)
         
@@ -154,9 +151,136 @@ def plot_permutation_tests(cm_axes, loocv_results, y_true, n_permutations=1000):
         ax.set_title(f'{mname}\np={p_val:.4f}', fontsize=10)
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
-    
+
+
+def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_permutations=1000):
+    model_names = list(all_preds_by_model[0].keys())
+    n = len(model_names)
+
+    combined = {}
+    for mname in model_names:
+        yt = np.concatenate(all_true)
+        yp = np.concatenate([entry[mname] for entry in all_preds_by_model])
+        combined[mname] = permutation_test_significance(yt, yp, n_permutations)
+
+    from alignment.label_alignment import compute_aggregate_confusion
+    agg_confusion = compute_aggregate_confusion(all_true, all_preds_by_model)
+    from sklearn.metrics import ConfusionMatrixDisplay
+    fig, axes = plt.subplots(2, n, figsize=(5 * n, 8))
+    if n == 1:
+        axes = axes.reshape(2, 1)
+
+    for idx, mname in enumerate(model_names):
+        ax_cm = axes[0, idx]
+        cm = agg_confusion[mname]
+        cm_norm = cm.astype('float') / cm.sum(axis=1, keepdims=True)
+        ConfusionMatrixDisplay(cm_norm, display_labels=[1, 2, 3]).plot(
+            ax=ax_cm, cmap='Blues', values_format='.0%', colorbar=False, text_kw={'fontsize': 9})
+        acc, f1_macro, f1_per = _f1_from_cm(cm)
+        subtitle = f'acc={acc:.3f}  F1={f1_macro:.3f}'
+        for k, f1k in enumerate(f1_per):
+            subtitle += f'  F1_{k+1}={f1k:.3f}'
+        ax_cm.set_title(f'{mname} — aggregate', fontsize=10)
+        ax_cm.text(0.5, -0.2, subtitle, transform=ax_cm.transAxes, ha='center', fontsize=8)
+
+        ax_perm = axes[1, idx]
+        observed, null_scores, p_val = combined[mname]
+        ax_perm.hist(null_scores, bins=30, alpha=0.7, color='gray', edgecolor='black', density=True)
+        ax_perm.axvline(observed, color='red', linewidth=2, label=f'Observed: {observed:.3f}')
+        ax_perm.axvline(np.percentile(null_scores, 95), color='orange', linestyle='--', label='95th percentile')
+        ax_perm.set_xlabel('F1 macro')
+        ax_perm.set_ylabel('Density')
+        ax_perm.set_title(f'{mname}\np={p_val:.4f}', fontsize=10)
+        ax_perm.legend(fontsize=8)
+        ax_perm.grid(True, alpha=0.3)
+
     plt.tight_layout()
-    return fig
+    fname = 'aggregate_permutation.pdf'
+    save_path = os.path.join(directory_path, fname)
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f'  Saved aggregate permutation test: {fname}')
+    plt.close(fig)
+
+
+def compute_shap_values(model, X, model_name):
+    import shap
+    if model_name == 'XGBoost':
+        explainer = shap.TreeExplainer(model)
+        return explainer.shap_values(X)
+    elif model_name in ('LogReg', 'SVM'):
+        explainer = shap.LinearExplainer(model, X)
+        return explainer.shap_values(X)
+    else:
+        explainer = shap.PermutationExplainer(model.predict_proba, X)
+        return explainer.shap_values(X)
+
+
+def train_full_models_and_shap(X_full, y_encoded, feature_cols, shap_imp_axes=None):
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.svm import SVC
+    from sklearn.neural_network import MLPClassifier
+    from xgboost import XGBClassifier
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_full)
+
+    full_models = {
+        'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
+        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000, probability=True),
+        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
+        'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
+                                  eval_metric='mlogloss', objective='multi:softmax', num_class=3),
+    }
+
+    shap_results = {}
+    for mname, model in full_models.items():
+        if mname == 'XGBoost':
+            model.fit(X_full, y_encoded)
+            shap_vals = compute_shap_values(model, X_full, mname)
+        else:
+            model.fit(X_scaled, y_encoded)
+            shap_vals = compute_shap_values(model, X_scaled, mname)
+        shap_results[mname] = shap_vals
+        if shap_imp_axes is not None:
+            plot_shap_feature_importance(shap_imp_axes[mname], shap_vals, feature_cols, mname)
+
+    return shap_results
+
+
+def plot_shap_feature_importance(ax, shap_values, feature_names, model_name, top_n=10):
+    if isinstance(shap_values, list):
+        shap_values = np.array(shap_values).transpose(1, 2, 0)
+    if shap_values.ndim == 3:
+        mean_shap = np.mean(np.abs(shap_values), axis=(0, 2))
+    else:
+        mean_shap = np.mean(np.abs(shap_values), axis=0)
+    top_idx = np.argsort(mean_shap)[-top_n:]
+    ax.barh(range(top_n), mean_shap[top_idx], color='steelblue')
+    ax.set_yticks(range(top_n))
+    ax.set_yticklabels([feature_names[i] for i in top_idx], fontsize=7)
+    ax.set_xlabel('mean |SHAP|')
+    ax.set_title(f'{model_name} — Top features', fontsize=9)
+    ax.grid(True, alpha=0.3, axis='x')
+
+
+def plot_shap_summary_violin(ax, shap_values, feature_names, model_name, top_n=10):
+    if isinstance(shap_values, list):
+        shap_values = np.array(shap_values).transpose(1, 2, 0)
+    if shap_values.ndim == 3:
+        shap_2d = np.mean(np.abs(shap_values), axis=2)
+    else:
+        shap_2d = shap_values.copy()
+    mean_shap = np.mean(np.abs(shap_2d), axis=0)
+    top_idx = np.argsort(mean_shap)[-top_n:]
+    data = [shap_2d[:, i] for i in reversed(top_idx)]
+    parts = ax.violinplot(data, vert=False, positions=range(top_n), showmeans=True)
+    ax.set_yticks(range(top_n))
+    ax.set_yticklabels([feature_names[i] for i in reversed(top_idx)], fontsize=7)
+    ax.axvline(0, color='gray', linestyle='--', alpha=0.5)
+    ax.set_xlabel('SHAP value')
+    ax.set_title(f'{model_name} — SHAP violin', fontsize=9)
+    ax.grid(True, alpha=0.3, axis='x')
 
 
 def save_if_best(fig, directory_path, f1_scores, per_class_f1, iteration, threshold=0.48):

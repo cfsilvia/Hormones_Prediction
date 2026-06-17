@@ -5,7 +5,11 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from archetype_analysis import compute_pca, sample_and_fit_archetypes, compute_archetype_probabilities, predict_archetype_loocv, select_top_per_archetype
 from alignment.label_alignment import get_alignment_mapping, apply_mapping, accumulate_results, compute_aggregate_confusion
-from plot_utils import setup_figure, draw_triangle, plot_confusion_matrices, save_if_best, plot_aggregate_confusion, plot_permutation_tests
+from plot_utils import (setup_figure, draw_triangle, plot_confusion_matrices, save_if_best,
+    plot_aggregate_confusion, plot_aggregate_permutation,
+    compute_shap_values, plot_shap_feature_importance, train_full_models_and_shap)
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 import os
 import openpyxl
 
@@ -23,7 +27,7 @@ def main():
     metadata_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']
 
     plt.ion()
-    fig, ax_tri, cm_axes, perm_axes = setup_figure()
+    fig, ax_tri, cm_axes, shap_imp_axes = setup_figure()
 
     iteration = 0
     attempts = 0
@@ -34,6 +38,7 @@ def main():
     all_true = []
     all_preds_by_model = []
     seen_indices = set()
+    iteration_metrics = []
 
     while iteration < 50:
         attempts += 1
@@ -81,10 +86,24 @@ def main():
 
             for mname, mres in loocv_results.items():
                 print(f'  {mname} LOOCV accuracy: {mres["accuracy"]:.3f}')
+                acc = accuracy_score(aligned_true, mres['predictions'])
+                f1_macro = f1_score(aligned_true, mres['predictions'], average='macro')
+                prec_per = precision_score(aligned_true, mres['predictions'], average=None)
+                rec_per = recall_score(aligned_true, mres['predictions'], average=None)
+                f1_per = f1_score(aligned_true, mres['predictions'], average=None)
+                iteration_metrics.append(dict(iteration=iteration, model=mname, accuracy=acc,
+                    f1_macro=f1_macro, precision_c1=prec_per[0], precision_c2=prec_per[1], precision_c3=prec_per[2],
+                    recall_c1=rec_per[0], recall_c2=rec_per[1], recall_c3=rec_per[2],
+                    f1_c1=f1_per[0], f1_c2=f1_per[1], f1_c3=f1_per[2]))
 
             f1_scores, per_class_f1 = plot_confusion_matrices(cm_axes, loocv_results, hormones_arch['Dominant_archetype'])
 
-            plot_permutation_tests(perm_axes, loocv_results, hormones_arch['Dominant_archetype'])
+            feature_cols = [c for c in hormones_arch.columns
+                            if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
+            X_full = hormones_arch[feature_cols].select_dtypes(include=[np.number]).values
+            le = LabelEncoder()
+            y_full = le.fit_transform(hormones_arch['Dominant_archetype'].values)
+            shap_results = train_full_models_and_shap(X_full, y_full, feature_cols, shap_imp_axes)
 
             saved = save_if_best(fig, directory_path, f1_scores, per_class_f1, iteration)
             if saved:
@@ -95,6 +114,29 @@ def main():
 
     agg_confusion = compute_aggregate_confusion(all_true, all_preds_by_model)
     plot_aggregate_confusion(agg_confusion, directory_path)
+    plot_aggregate_permutation(all_true, all_preds_by_model, directory_path)
+
+    df_iter = pd.DataFrame(iteration_metrics)
+    agg_rows = []
+    for mname in df_iter['model'].unique():
+        yt = np.concatenate(all_true)
+        yp = np.concatenate([entry[mname] for entry in all_preds_by_model])
+        acc = accuracy_score(yt, yp)
+        f1_macro = f1_score(yt, yp, average='macro')
+        prec_per = precision_score(yt, yp, average=None)
+        rec_per = recall_score(yt, yp, average=None)
+        f1_per = f1_score(yt, yp, average=None)
+        agg_rows.append(dict(model=mname, accuracy=acc, f1_macro=f1_macro,
+            precision_c1=prec_per[0], precision_c2=prec_per[1], precision_c3=prec_per[2],
+            recall_c1=rec_per[0], recall_c2=rec_per[1], recall_c3=rec_per[2],
+            f1_c1=f1_per[0], f1_c2=f1_per[1], f1_c3=f1_per[2]))
+    df_agg = pd.DataFrame(agg_rows)
+
+    excel_path = os.path.join(directory_path, 'classification_metrics.xlsx')
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        df_iter.to_excel(writer, sheet_name='per_iteration', index=False)
+        df_agg.to_excel(writer, sheet_name='aggregated', index=False)
+    print(f'  Saved classification metrics: {excel_path}')
 
     plt.ioff()
     plt.show()
