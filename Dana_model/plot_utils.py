@@ -294,6 +294,35 @@ def plot_shap_summary_violin(ax, shap_values, feature_names, model_name, top_n=1
     ax.grid(True, alpha=0.3, axis='x')
 
 
+def plot_shap_per_archetype(aggregated_shap, feature_cols, directory_path):
+    n_classes = 3
+    model_names = list(aggregated_shap.keys())
+    archetype_labels = [f'Archetype {i+1}' for i in range(n_classes)]
+    n_models = len(model_names)
+
+    fig = plt.figure(figsize=(6 * n_classes, 4 * n_models))
+    for row, mname in enumerate(model_names):
+        mdata = aggregated_shap[mname]
+        all_shap = np.concatenate(mdata['raw_shap'], axis=0)
+        all_features = np.concatenate(mdata['raw_features'], axis=0)
+        for cls in range(n_classes):
+            plt.subplot(n_models, n_classes, row * n_classes + cls + 1)
+            shap.summary_plot(
+                all_shap[:, :, cls], all_features,
+                feature_names=feature_cols,
+                plot_type='bar',
+                show=False
+            )
+            plt.title(f'{mname} — {archetype_labels[cls]}', fontsize=10)
+
+    plt.tight_layout()
+    fname = 'shap_all_models_per_archetype.pdf'
+    save_path = os.path.join(directory_path, fname)
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f'  Saved SHAP per archetype: {fname}')
+    plt.close(fig)
+
+
 def save_if_best(fig, directory_path, f1_scores, per_class_f1, iteration, threshold=0.48):
     avg_f1_per = np.mean(per_class_f1, axis=0)
     if np.max(f1_scores) > threshold:

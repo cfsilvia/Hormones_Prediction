@@ -7,9 +7,10 @@ from archetype_analysis import compute_pca, sample_and_fit_archetypes, compute_a
 from alignment.label_alignment import get_alignment_mapping, apply_mapping, accumulate_results, compute_aggregate_confusion
 from plot_utils import (setup_figure, draw_triangle, plot_confusion_matrices, save_if_best,
     plot_aggregate_confusion, plot_permutation_tests, plot_aggregate_permutation,
-    compute_shap_values, plot_shap_feature_importance)
+    compute_shap_values, plot_shap_feature_importance, plot_shap_per_archetype)
 from shap_calculation import train_full_models_and_shap
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.preprocessing import StandardScaler
 import os
 import openpyxl
 
@@ -123,8 +124,30 @@ def main():
             # do permutation tests and plot the results -after mapping
             pvalues =plot_permutation_tests(perm_axes, loocv_results, aligned_true)
             shap_results = train_full_models_and_shap(hormones_arch, metadata_cols, aligned_true)
+            if feature_cols is None:
+                feature_cols = [c for c in hormones_arch.columns
+                                if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
+            
+            X_full = hormones_arch[feature_cols].select_dtypes(include=[np.number]).values
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X_full)
+
             for m in shap_results:
-                shap_results_p = {'shap': shap_results[m], 'p_value': pvalues[m]}
+                shap_vals = shap_results[m]
+                if isinstance(shap_vals, list):
+                    shap_vals = np.array(shap_vals).transpose(1, 2, 0)
+                per_feature_mean_abs = np.mean(np.abs(shap_vals), axis=(0, 2))
+                per_class_mean_abs = np.mean(np.abs(shap_vals), axis=0)
+                X_raw = X_full if m == 'XGBoost' else X_scaled
+                if m not in aggregated_shap:
+                    aggregated_shap[m] = {'mean_abs': [], 'per_class_mean_abs': [],
+                                          'p_values': [], 'raw_shap': [], 'raw_features': []}
+                aggregated_shap[m]['mean_abs'].append(per_feature_mean_abs)
+                aggregated_shap[m]['per_class_mean_abs'].append(per_class_mean_abs)
+                aggregated_shap[m]['p_values'].append(pvalues[m])
+                aggregated_shap[m]['raw_shap'].append(shap_vals)
+                aggregated_shap[m]['raw_features'].append(X_raw)
+            shap_iter_count += 1
 
             saved = save_if_best(fig, directory_path, f1_scores, per_class_f1, iteration)
            
@@ -157,6 +180,34 @@ def main():
         df_iter.to_excel(writer, sheet_name='per_iteration', index=False)
         df_agg.to_excel(writer, sheet_name='aggregated', index=False)
     print(f'  Saved classification metrics: {excel_path}')
+
+    if aggregated_shap:
+        shap_agg_rows = []
+        for mname, mdata in aggregated_shap.items():
+            mean_p = np.mean(mdata['p_values'])
+            if mean_p >= 0.05:
+                continue
+            mean_abs_arr = np.array(mdata['mean_abs'])
+            avg_mean_abs = np.mean(mean_abs_arr, axis=0)
+            std_mean_abs = np.std(mean_abs_arr, axis=0)
+            for i, feat in enumerate(feature_cols):
+                shap_agg_rows.append(dict(
+                    model=mname, feature=feat,
+                    mean_abs_shap=avg_mean_abs[i],
+                    std_abs_shap=std_mean_abs[i],
+                    mean_p_value=mean_p,
+                    n_iterations=shap_iter_count
+                ))
+        df_shap = pd.DataFrame(shap_agg_rows)
+        
+        shap_excel_path = os.path.join(directory_path, 'shap_aggregated.xlsx')
+        with pd.ExcelWriter(shap_excel_path, engine='openpyxl') as writer:
+            df_shap.to_excel(writer, sheet_name='shap_aggregated', index=False)
+            
+        print(f'  Saved aggregated SHAP: {shap_excel_path}')
+
+    if aggregated_shap:
+        plot_shap_per_archetype(aggregated_shap, feature_cols, directory_path)
 
     plt.ioff()
     plt.show()
