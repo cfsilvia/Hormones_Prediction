@@ -24,6 +24,11 @@ def main():
 
     min_per_vertex = 40
     pca_model, all_pca_coords, behavior_cols = compute_pca(behavior_every_day_df)
+    behavior_params_df = pd.DataFrame({'behavior_parameter': behavior_cols})
+    behavior_params_path = os.path.join(directory_path, 'behavior_parameters.xlsx')
+    behavior_params_df.to_excel(behavior_params_path, index=False)
+    print(f'  Saved behavior parameters: {behavior_params_path}')
+
     metadata_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']
 
     plt.ion()
