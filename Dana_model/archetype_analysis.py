@@ -12,6 +12,7 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.model_selection import LeaveOneOut
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import GridSearchCV
+from scipy.stats import zscore
 
 
 def _normalize_column_names(df):
@@ -28,7 +29,7 @@ def assign_to_nearest_vertex(pca_coords, archetypes):
 
 
 def compute_pca(data_df):
-    from scipy.stats import zscore
+    
     data_df = _normalize_column_names(data_df)
     exclude_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']
     behavior_cols = [c for c in data_df.columns if c not in exclude_cols]
@@ -71,7 +72,7 @@ def compute_archetype_probabilities(pca_coords, archetypes):
     n_points = pca_coords.shape[0]
     n_arch = archetypes.shape[0]
     probs = np.zeros((n_points, n_arch))
-    A_mat = np.vstack([archetypes.T, np.ones(n_arch)])
+    A_mat = np.vstack([archetypes.T, np.ones(n_arch)]) #add a row of ones
 
     for i in range(n_points):
         b = np.array([pca_coords[i, 0], pca_coords[i, 1], 1.0])
