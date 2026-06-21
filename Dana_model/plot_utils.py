@@ -212,6 +212,71 @@ def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_p
     plt.close(fig)
 
 
+# input: all_true (list of lists), all_preds_by_model (list of dicts), directory_path (str), n_permutations (int)
+# output: None (saves grid of per-archetype permutation histograms, rows=model, cols=archetype)
+def plot_permutation_per_archetype(all_true, all_preds_by_model, directory_path, n_permutations=1000):
+    from sklearn.metrics import f1_score
+
+    model_names = list(all_preds_by_model[0].keys())
+    n_models = len(model_names)
+    archetype_labels = [1, 2, 3]
+    arch_colors = ['red', 'green', 'orange']
+
+    fig, axes = plt.subplots(n_models, 3, figsize=(18, 4 * n_models),
+                             sharex='col', sharey='col')
+
+    for m_idx, mname in enumerate(model_names):
+        y_true_arr = np.concatenate(all_true)
+        y_pred_arr = np.concatenate([entry[mname] for entry in all_preds_by_model])
+
+        observed_f1 = f1_score(y_true_arr, y_pred_arr, average=None)
+
+        null_scores = {c: [] for c in archetype_labels}
+        rng = np.random.RandomState(42)
+        for _ in range(n_permutations):
+            perm = rng.permutation(len(y_true_arr))
+            f1_vals = f1_score(y_true_arr[perm], y_pred_arr, average=None)
+            for i, c in enumerate(archetype_labels):
+                null_scores[c].append(f1_vals[i])
+
+        for cls_idx, cls_label in enumerate(archetype_labels):
+            ax = axes[m_idx, cls_idx] if n_models > 1 else axes[cls_idx]
+
+            null_arr = np.array(null_scores[cls_label])
+            p_val = (np.sum(null_arr >= observed_f1[cls_idx]) + 1) / (n_permutations + 1)
+
+            ax.hist(null_arr, bins=30, alpha=0.7, color='gray',
+                    edgecolor='black', density=True)
+            ax.axvline(observed_f1[cls_idx], color=arch_colors[cls_idx], linewidth=2,
+                       label=f'Obs F1={observed_f1[cls_idx]:.3f}')
+            ax.axvline(np.percentile(null_arr, 95), color='orange',
+                       linestyle='--', label='95th percentile')
+            ax.legend(fontsize=7, loc='upper left')
+            ax.text(0.98, 0.95, f'p={p_val:.4f}', transform=ax.transAxes, fontsize=9,
+                    va='top', ha='right', bbox=dict(boxstyle='round', fc='white', ec='gray', alpha=0.8))
+            ax.grid(True, alpha=0.3)
+
+            if m_idx == 0:
+                ax.set_title(f'Archetype {cls_label}', fontsize=12, color=arch_colors[cls_idx])
+            if m_idx == n_models - 1:
+                ax.set_xlabel('F1 score')
+            if cls_idx == 0:
+                ax.set_ylabel('Density')
+
+    for m_idx, mname in enumerate(model_names):
+        ax = axes[m_idx, 0] if n_models > 1 else axes[0]
+        ax.text(-0.22, 0.5, mname, transform=ax.transAxes, fontsize=11,
+                fontweight='bold', va='center', ha='right', rotation=90)
+
+    fig.suptitle('Permutation Test — Per-Archetype F1 Scores per Model', fontsize=14)
+    plt.tight_layout()
+    fname = 'permutation_per_archetype.pdf'
+    save_path = os.path.join(directory_path, fname)
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f'  Saved per-archetype permutation test: {fname}')
+    plt.close(fig)
+
+
 def compute_shap_values(model, X, model_name):
     
         if model_name == 'XGBoost':

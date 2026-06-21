@@ -15,21 +15,24 @@ from sklearn.model_selection import GridSearchCV
 from scipy.stats import zscore
 
 
+# input: df (DataFrame)
+# output: df (DataFrame) — column names with spaces replaced by dots
 def _normalize_column_names(df):
     df = df.copy()
     df.columns = [c.replace(' ', '.') for c in df.columns]
     return df
 
-
+# input: pca_coords (ndarray), archetypes (ndarray)
+# output: counts (list of int) — number of points assigned to each archetype vertex
 def assign_to_nearest_vertex(pca_coords, archetypes):
     dists = np.linalg.norm(pca_coords[:, np.newaxis, :] - archetypes[np.newaxis, :, :], axis=2)
     assignments = np.argmin(dists, axis=1)
     counts = [int(np.sum(assignments == v)) for v in range(archetypes.shape[0])]
     return counts
 
-
+# input: data_df (DataFrame) — includes metadata and behavior columns
+# output: (pca_model, pca_coords, behavior_cols) — fitted PCA, 2D coordinates, column names
 def compute_pca(data_df):
-    
     data_df = _normalize_column_names(data_df)
     exclude_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']
     behavior_cols = [c for c in data_df.columns if c not in exclude_cols]
@@ -40,7 +43,8 @@ def compute_pca(data_df):
     pca_coords = pca.fit_transform(behavior_data)
     return pca, pca_coords, behavior_cols
 
-
+# input: pca (PCA model), data_df (DataFrame), behavior_cols (list of str)
+# output: pca_coords (ndarray) — transformed 2D coordinates for new data
 def apply_pca_transform(pca, data_df, behavior_cols):
     from scipy.stats import zscore
     data_df = _normalize_column_names(data_df)
@@ -52,7 +56,9 @@ def apply_pca_transform(pca, data_df, behavior_cols):
     behavior_data = np.nan_to_num(behavior_data)
     return pca.transform(behavior_data)
 
-
+# input: pca_coords_all (ndarray), sample_frac (float)
+# output: (pca_coords, archetypes, varexlp, counts, sample_indices)
+#         — sampled coords, 3 archetype vertices, variance explained, counts, indices used
 def sample_and_fit_archetypes(pca_coords_all, sample_frac=0.8):
     n = pca_coords_all.shape[0]
     n_sample = max(int(n * sample_frac), 3)
@@ -67,17 +73,18 @@ def sample_and_fit_archetypes(pca_coords_all, sample_frac=0.8):
 
     return pca_coords, archetypes, varexlp, counts, sample_indices
 
-
+# input: pca_coords (ndarray), archetypes (ndarray)
+# output: probs (ndarray) — [n_points x 3] convex combination weights for each archetype
 def compute_archetype_probabilities(pca_coords, archetypes):
     n_points = pca_coords.shape[0]
     n_arch = archetypes.shape[0]
     probs = np.zeros((n_points, n_arch))
-    A_mat = np.vstack([archetypes.T, np.ones(n_arch)]) #add a row of ones
+    A_mat = np.vstack([archetypes.T, np.ones(n_arch)])
 
     for i in range(n_points):
         b = np.array([pca_coords[i, 0], pca_coords[i, 1], 1.0])
         alpha = np.linalg.lstsq(A_mat, b, rcond=None)[0]
-        alpha = np.maximum(alpha, 0) #remove negative values
+        alpha = np.maximum(alpha, 0)
         s = np.sum(alpha)
         if s > 0:
             alpha = alpha / s
@@ -87,14 +94,14 @@ def compute_archetype_probabilities(pca_coords, archetypes):
 
     return probs
 
-
+# input: df (DataFrame), metadata_cols (list of str)
+# output: results (dict) — per model: predictions list + accuracy from LOOCV
 def predict_archetype_loocv(df, metadata_cols):
     feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
     X = df[feature_cols].select_dtypes(include=[np.number]).values
     le = LabelEncoder()
     y = le.fit_transform(df['Dominant_archetype'].values)
     n = len(df)
-    n_features = X.shape[1]
     n_classes = len(le.classes_)
 
     models = {
@@ -107,11 +114,9 @@ def predict_archetype_loocv(df, metadata_cols):
 
     loo = LeaveOneOut()
     results = {}
-   
 
     for name, model in models.items():
         preds = np.empty(n, dtype=int)
-       
 
         for train_idx, test_idx in loo.split(X):
             X_train, X_test = X[train_idx], X[test_idx]
@@ -124,8 +129,6 @@ def predict_archetype_loocv(df, metadata_cols):
                 sample_weights = np.array([cw[list(classes).index(v)] for v in y_train])
                 model_clone.fit(X_train, y_train, sample_weight=sample_weights)
                 preds[test_idx[0]] = model_clone.predict(X_test)[0]
-
-               
             else:
                 scaler = StandardScaler()
                 X_train_scaled = scaler.fit_transform(X_train)
@@ -139,20 +142,16 @@ def predict_archetype_loocv(df, metadata_cols):
                     model_clone.fit(X_train_scaled, y_train)
                 preds[test_idx[0]] = model_clone.predict(X_test_scaled)[0]
 
-               
-
         preds_orig = le.inverse_transform(preds)
         y_orig = le.inverse_transform(y)
         acc = np.mean(preds_orig == y_orig)
         results[name] = {'predictions': preds_orig, 'accuracy': acc}
 
-      
     return results
 
-
+# input: table_df (DataFrame), archetypes (ndarray or None), n_per_arch (int)
+# output: agg (DataFrame) — one row per animal with dominant archetype, balanced via Hungarian
 def select_top_per_archetype(table_df, archetypes=None, n_per_arch=20):
-   
-
     group_keys = ['Experiment', 'sex', 'Hierarchy']
 
     grouped = table_df.groupby(group_keys)
@@ -191,6 +190,8 @@ def select_top_per_archetype(table_df, archetypes=None, n_per_arch=20):
 
     return agg
 
+# input: table_df (DataFrame)
+# output: agg (DataFrame) — one row per animal, dominant archetype by max cum probability
 def select_top_per_archetype_dominant(table_df):
     group_keys = ['Experiment', 'sex', 'Hierarchy']
 

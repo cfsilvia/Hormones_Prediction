@@ -6,17 +6,20 @@ from scipy.stats import zscore, pearsonr
 import matplotlib.pyplot as plt
 import os
 
-
+# input: df (DataFrame)
+# output: df (DataFrame) — column names with spaces replaced by dots
 def _normalize_column_names(df):
     df = df.copy()
     df.columns = [c.replace(' ', '.') for c in df.columns]
     return df
 
-
+# input: data_df (DataFrame) — behavior data with metadata columns
+# output: (pca_model, pca_coords, behavior_cols)
 def run_pca(data_df):
     return compute_pca(data_df)
 
-
+# input: pca_coords (ndarray), n_trials (int)
+# output: (best_archetypes, best_varexlp, best_counts) — best PCHA triangle
 def find_best_triangle(pca_coords, n_trials=500):
     best_archetypes = None
     best_varexlp = -np.inf
@@ -40,20 +43,21 @@ def find_best_triangle(pca_coords, n_trials=500):
 
     return best_archetypes, best_varexlp, best_counts
 
-
+# input: pvals (array-like) — raw p-values
+# output: qvals (ndarray) — BH-adjusted p-values
 def _bh_correction(pvals):
     pvals = np.array(pvals)
     n = len(pvals)
     ranked = np.argsort(pvals)
     sorted_p = pvals[ranked]
     bh_threshold = np.minimum(sorted_p * n / (np.arange(1, n + 1)), 1.0)
-    rejected = sorted_p <= bh_threshold
     p_corrected = np.minimum.accumulate(bh_threshold[::-1])[::-1]
     qvals = np.empty(n)
     qvals[ranked] = p_corrected
     return qvals
 
-
+# input: behavior_df (DataFrame), archetype_probs (ndarray), metadata_cols (list)
+# output: df (DataFrame) — Pearson r, p_value, p_adjusted_BH per behaviour per archetype
 def archetype_correlation_with_behaviour(behavior_df, archetype_probs, metadata_cols):
     cols = [c for c in behavior_df.columns if c not in metadata_cols]
     behavior_data = behavior_df[cols].select_dtypes(include=[np.number])
@@ -70,7 +74,8 @@ def archetype_correlation_with_behaviour(behavior_df, archetype_probs, metadata_
         df.loc[mask, 'p_adjusted_BH'] = _bh_correction(df.loc[mask, 'p_value'].values)
     return df.sort_values(['Archetype', 'Pearson_r'], ascending=[True, False])
 
-
+# input: hormone_arch_df (DataFrame), metadata_cols (list)
+# output: df (DataFrame) — Pearson r, p_value, p_adjusted_BH per hormone per archetype
 def hormone_correlation_with_archetypes(hormone_arch_df, metadata_cols):
     arch_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
     hormone_cols = [c for c in hormone_arch_df.columns
@@ -90,7 +95,8 @@ def hormone_correlation_with_archetypes(hormone_arch_df, metadata_cols):
         df.loc[mask, 'p_adjusted_BH'] = _bh_correction(df.loc[mask, 'p_value'].values)
     return df.sort_values(['Archetype', 'Pearson_r'], ascending=[True, False])
 
-
+# input: all_pca_coords (ndarray), archetypes (ndarray), counts (list), varexlp (float), save_path (str)
+# output: None (saves PCA scatter + archetype triangle plot)
 def plot_pca_triangle(all_pca_coords, archetypes, counts, varexlp, save_path):
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.scatter(all_pca_coords[:, 0], all_pca_coords[:, 1], alpha=0.5, s=25, c='steelblue', label='Every day')
@@ -112,7 +118,8 @@ def plot_pca_triangle(all_pca_coords, archetypes, counts, varexlp, save_path):
     plt.close(fig)
     print(f'  Saved triangle plot: {save_path}')
 
-
+# input: corr_df (DataFrame), value_col (str), save_path (str), pval_col (str), threshold (float)
+# output: None (saves bar plot of significant correlations per archetype)
 def plot_significant_correlations(corr_df, value_col, save_path, pval_col='p_adjusted_BH', threshold=0.05):
     sig = corr_df[corr_df[pval_col] < threshold].copy()
     max_n = max(len(sig[sig['Archetype'] == f'Archetype{a+1}']) for a in range(3))
@@ -139,29 +146,27 @@ def plot_significant_correlations(corr_df, value_col, save_path, pval_col='p_adj
     plt.close(fig)
     print(f'  Saved significant correlations plot: {save_path}')
 
+# input: data_dir (str) — path to folder with Excel files
+# output: behavior_df (DataFrame), hormones_df (DataFrame)
+def load_data(data_dir):
+    behavior_df = pd.read_excel(f'{data_dir}/Behavior_every_day.xlsx')
+    hormones_df = pd.read_excel(f'{data_dir}/Hormones.xlsx')
+    return behavior_df, hormones_df
 
-def main():
-    data_dir = r'U:\Users\Silvia\RutiFrishman_2025_hormones_paper\Personality_Prediction_March_2026\June_pareto_all_data\Dana_model\data_to_use'
-    behavior = 'Behavior_every_day.xlsx'
-    hormones = 'Hormones.xlsx'
-
-    behavior_df = pd.read_excel(f'{data_dir}/{behavior}')
-    hormones_df = pd.read_excel(f'{data_dir}/{hormones}')
-
+# input: behavior_df (DataFrame), data_dir (str)
+# output: (archetypes, all_pca_coords, prob_coeffs, table_df, metadata_cols)
+def run_archetype_analysis(behavior_df, data_dir):
     metadata_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']
 
-    print('Running PCA on behavior data...')
+    print('Running PCA...')
     pca_model, all_pca_coords, behavior_cols = run_pca(behavior_df)
-    print(f'  PCA explained variance ratio: {pca_model.explained_variance_ratio_}')
-    print(f'  Total variance explained by 2 PCs: {pca_model.explained_variance_ratio_.sum():.3f}')
+    print(f'  Variance explained: {pca_model.explained_variance_ratio_.sum():.3f}')
 
     print('Finding best triangle with PCHA...')
     archetypes, varexlp, counts = find_best_triangle(all_pca_coords, n_trials=500)
-    print(f'  Best triangle variance explained: {varexlp:.3f}')
-    print(f'  Counts per vertex: {counts}')
-    print(f'  Archetype coordinates (PC1, PC2):')
+    print(f'  Var explained: {varexlp:.3f}, Counts: {counts}')
     for i, arch in enumerate(archetypes):
-        print(f'    Archetype {i+1}: PC1={arch[0]:.4f}, PC2={arch[1]:.4f}')
+        print(f'  Archetype {i+1}: PC1={arch[0]:.4f}, PC2={arch[1]:.4f}')
 
     plot_pca_triangle(all_pca_coords, archetypes, counts, varexlp,
                       os.path.join(data_dir, 'pca_triangle.pdf'))
@@ -178,14 +183,22 @@ def main():
     prob_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
     table_df['Dominant_archetype'] = table_df[prob_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
 
-    print('Correlating archetypes with original behavior parameters...')
-    corr_behav = archetype_correlation_with_behaviour(behavior_df, prob_coeffs, metadata_cols)
-    print(corr_behav.groupby('Archetype').head(5).to_string(index=False))
+    return archetypes, all_pca_coords, prob_coeffs, table_df, metadata_cols
 
-    plot_significant_correlations(corr_behav, 'Pearson_r',
+# input: behavior_df (DataFrame), prob_coeffs (ndarray), metadata_cols (list), data_dir (str)
+# output: corr_df (DataFrame) — behaviour correlations + plot
+def correlate_with_behaviour(behavior_df, prob_coeffs, metadata_cols, data_dir):
+    print('Correlating archetypes with behaviour...')
+    corr_df = archetype_correlation_with_behaviour(behavior_df, prob_coeffs, metadata_cols)
+    print(corr_df.groupby('Archetype').head(5).to_string(index=False))
+    plot_significant_correlations(corr_df, 'Pearson_r',
                                   os.path.join(data_dir, 'archetype_behaviour_correlations.pdf'))
+    return corr_df
 
-    print('Joining with hormone data...')
+# input: table_df (DataFrame), hormones_df (DataFrame), metadata_cols (list)
+# output: hormones_arch (DataFrame) — per-animal archetype probs + hormone levels
+def aggregate_and_merge_hormones(table_df, hormones_df, metadata_cols):
+    print('Aggregating per animal and merging with hormones...')
     group_keys = ['Experiment', 'sex', 'Hierarchy']
     agg = table_df.groupby(group_keys).agg(
         PC1=('PC1', 'mean'),
@@ -202,39 +215,63 @@ def main():
         hormones_df.drop_duplicates(subset=['Experiment', 'sex', 'Hierarchy']),
         on=['Experiment', 'sex', 'Hierarchy'], how='inner'
     )
+
     arch_prob_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
     for a_idx, cname in enumerate(['cum_arch1', 'cum_arch2', 'cum_arch3']):
         if cname in hormones_arch.columns:
             hormones_arch[arch_prob_cols[a_idx]] = hormones_arch[cname]
             hormones_arch = hormones_arch.drop(columns=[cname])
-    for c in ['n_days']:
-        if c in hormones_arch.columns:
-            hormones_arch = hormones_arch.drop(columns=[c])
+    if 'n_days' in hormones_arch.columns:
+        hormones_arch = hormones_arch.drop(columns=['n_days'])
 
+    return hormones_arch
+
+# input: hormones_arch (DataFrame), metadata_cols (list), data_dir (str)
+# output: corr_df (DataFrame) — hormone correlations + BH + raw plots
+def correlate_with_hormones(hormones_arch, metadata_cols, data_dir):
     print('Correlating hormones with archetypes...')
-    corr_horm = hormone_correlation_with_archetypes(hormones_arch, metadata_cols)
-    print(corr_horm.groupby('Archetype').head(5).to_string(index=False))
+    corr_df = hormone_correlation_with_archetypes(hormones_arch, metadata_cols)
+    print(corr_df.groupby('Archetype').head(5).to_string(index=False))
 
-    plot_significant_correlations(corr_horm, 'Pearson_r',
+    plot_significant_correlations(corr_df, 'Pearson_r',
                                   os.path.join(data_dir, 'archetype_hormone_correlations_BH.pdf'))
-    plot_significant_correlations(corr_horm, 'Pearson_r',
+    plot_significant_correlations(corr_df, 'Pearson_r',
                                   os.path.join(data_dir, 'archetype_hormone_correlations_raw.pdf'),
                                   pval_col='p_value', threshold=0.05)
+    return corr_df
 
-    output_dir = data_dir
-    corr_behav.to_excel(os.path.join(output_dir, 'archetype_behaviour_correlation.xlsx'), index=False)
-    corr_horm.to_excel(os.path.join(output_dir, 'archetype_hormone_correlation.xlsx'), index=False)
-    table_df.to_csv(os.path.join(output_dir, 'archetype_probabilities_per_day.xlsx'), index=False)
-    hormones_arch.to_csv(os.path.join(output_dir, 'hormones_with_archetypes.xlsx'), index=False)
+# input: corr_behav (DataFrame), corr_horm (DataFrame), table_df (DataFrame), hormones_arch (DataFrame), data_dir (str)
+# output: None (saves all results to Excel/CSV)
+def save_outputs(corr_behav, corr_horm, table_df, hormones_arch, data_dir):
+    corr_behav.to_excel(os.path.join(data_dir, 'archetype_behaviour_correlation.xlsx'), index=False)
+    corr_horm.to_excel(os.path.join(data_dir, 'archetype_hormone_correlation.xlsx'), index=False)
+    table_df.to_csv(os.path.join(data_dir, 'archetype_probabilities_per_day.xlsx'), index=False)
+    hormones_arch.to_csv(os.path.join(data_dir, 'hormones_with_archetypes.xlsx'), index=False)
 
-    print(f'\nResults saved to {output_dir}')
-    print(f'  - archetype_behaviour_correlation.xlsx')
-    print(f'  - archetype_hormone_correlation.xlsx')
-    print(f'  - archetype_probabilities_per_day.xlsx')
-    print(f'  - hormones_with_archetypes.xlsx')
-    print(f'  - pca_triangle.pdf')
-    print(f'  - archetype_behaviour_correlations.pdf')
-    print(f'  - archetype_hormone_correlations.pdf')
+    print(f'\nResults saved to {data_dir}')
+    for f in ['archetype_behaviour_correlation.xlsx', 'archetype_hormone_correlation.xlsx',
+              'archetype_probabilities_per_day.xlsx', 'hormones_with_archetypes.xlsx',
+              'pca_triangle.pdf', 'archetype_behaviour_correlations.pdf',
+              'archetype_hormone_correlations_BH.pdf', 'archetype_hormone_correlations_raw.pdf']:
+        print(f'  - {f}')
+
+# input: None (uses hardcoded data_dir)
+# output: None (runs full pipeline: load → PCA → PCHA → correlation → save)
+def main():
+    data_dir = r'U:\Users\Silvia\RutiFrishman_2025_hormones_paper\Personality_Prediction_March_2026\June_pareto_all_data\Dana_model\data_to_use'
+
+    behavior_df, hormones_df = load_data(data_dir)
+
+    archetypes, all_pca_coords, prob_coeffs, table_df, metadata_cols = \
+        run_archetype_analysis(behavior_df, data_dir)
+
+    corr_behav = correlate_with_behaviour(behavior_df, prob_coeffs, metadata_cols, data_dir)
+
+    hormones_arch = aggregate_and_merge_hormones(table_df, hormones_df, metadata_cols)
+
+    corr_horm = correlate_with_hormones(hormones_arch, metadata_cols, data_dir)
+
+    save_outputs(corr_behav, corr_horm, table_df, hormones_arch, data_dir)
 
 if __name__ == '__main__':
     main()
