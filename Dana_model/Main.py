@@ -53,12 +53,11 @@ def main():
     shap_iter_count = 0
     feature_cols = None
 
-    while iteration < 50:
-        attempts += 1
-        # Sample and fit archetypes
-        pca_coords, archetypes, varexlp, counts, sample_indices = sample_and_fit_archetypes(all_pca_coords)
-        
-        #only accept if the sample indices have not been seen before
+    while state['iteration'] < 50:
+        state['attempts'] += 1
+        pca_coords, archetypes, varexlp, counts, sample_indices = \
+            sample_and_fit_archetypes(all_pca_coords)
+
         idx_tuple = tuple(sorted(sample_indices))
         if idx_tuple in seen_indices:
             continue
