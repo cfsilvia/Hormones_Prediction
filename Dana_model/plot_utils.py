@@ -72,12 +72,12 @@ def plot_confusion_matrices(cm_axes, loocv_results, y_true):
         f1_scores.append(f1_macro)
         f1_per = f1_score(y_true, mres['predictions'], average=None)
         per_class_f1.append(f1_per)
-        ConfusionMatrixDisplay.from_predictions(
-            y_true, mres['predictions'],
-            display_labels=[1, 2, 3], ax=ax,
-             cmap='Blues',
-            colorbar=False, text_kw={'fontsize': 9},
-        )
+        cm = confusion_matrix(y_true, mres['predictions'], labels=[1, 2, 3])
+        cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
+
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm_normalized, display_labels=[1, 2, 3])
+        disp.plot(ax=ax, cmap='Blues', colorbar=False, text_kw={'fontsize': 9})
+
         ax.set_title(f'{mname}  acc={mres["accuracy"]:.3f}  F1={f1_macro:.3f}', fontsize=10)
     return f1_scores, per_class_f1
 
