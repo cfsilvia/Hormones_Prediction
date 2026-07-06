@@ -157,11 +157,35 @@ def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_p
     model_names = list(all_preds_by_model[0].keys())
     n = len(model_names)
 
+    from scipy.stats import chi2
+    rng = np.random.RandomState(42)
+
     combined = {}
     for mname in model_names:
-        yt = np.concatenate(all_true)
-        yp = np.concatenate([entry[mname] for entry in all_preds_by_model])
-        combined[mname] = permutation_test_significance(yt, yp, n_permutations)
+        observed_list = []
+        per_iter_pvalues = []
+        nulls = []
+        for yt, entry in zip(all_true, all_preds_by_model):
+            obs, null_scores, p_i = permutation_test_significance(yt, entry[mname], n_permutations)
+            observed_list.append(obs)
+            per_iter_pvalues.append(p_i)
+            nulls.append(null_scores)
+
+        combined_observed = np.mean(observed_list)
+
+        per_iter_pvalues = np.maximum(np.array(per_iter_pvalues), 1.0 / (n_permutations + 1))
+        chi2_stat = -2.0 * np.sum(np.log(per_iter_pvalues))
+        p_fisher = 1.0 - chi2.cdf(chi2_stat, 2 * len(per_iter_pvalues))
+
+        null_matrix = np.vstack(nulls)
+        n_iter = null_matrix.shape[0]
+        combined_null = np.zeros(n_permutations)
+        for k in range(n_permutations):
+            idxs = rng.randint(0, n_permutations, size=n_iter)
+            combined_null[k] = np.mean(null_matrix[np.arange(n_iter), idxs])
+
+        p_empirical = (np.sum(combined_null >= combined_observed) + 1) / (n_permutations + 1)
+        combined[mname] = (combined_observed, combined_null, p_empirical, p_fisher)
 
     from alignment.label_alignment import compute_aggregate_confusion
     agg_confusion = compute_aggregate_confusion(all_true, all_preds_by_model)

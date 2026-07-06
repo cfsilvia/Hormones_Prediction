@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import os
 from sklearn.decomposition import PCA
 from py_pcha import PCHA
 from sklearn.linear_model import LogisticRegression
@@ -15,7 +14,6 @@ from sklearn.model_selection import LeaveOneOut
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import GridSearchCV
 from scipy.stats import zscore
-from main_utils import build_table_df, select_top_and_merge_hormones
 
 
 # input: df (DataFrame)
@@ -155,8 +153,7 @@ def _get_models(n_classes, model_names=None):
 # input: df (DataFrame), metadata_cols (list of str), model_names (list/None)
 # output: results (dict) — per model: predictions list + accuracy from LOOCV
 def predict_archetype_loocv(df, metadata_cols, model_names=None):
-    feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2'
-                    and c not in ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']]
+    feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
     X = df[feature_cols].select_dtypes(include=[np.number]).values
     le = LabelEncoder()
     y = le.fit_transform(df['Dominant_archetype'].values)
@@ -228,12 +225,10 @@ def select_top_per_archetype(table_df, archetypes=None, n_per_arch=20):
         n_animals = len(agg)
         n_arch = archetypes.shape[0]
         total_slots = n_per_arch * n_arch
-        prob_cols = [f'Archetype{i + 1}_prob' for i in range(n_arch)]
 
         arch_probs = compute_archetype_probabilities(mean_pc, archetypes)
-        agg[prob_cols] = arch_probs
  
-        # This makes the assignment prefer animals with higher mean-PCA probability for each archetype.
+        #This makes the assignment prefer animals with higher probability for each archetype.
         cost_matrix = np.zeros((n_animals, total_slots))
         for j in range(n_arch):
             for k in range(n_per_arch):
@@ -305,31 +300,3 @@ def select_top_per_archetype_with_distance(table_df, archetypes=None, n_per_arch
         agg['Dominant_archetype'] = selected_archetypes + 1
 
     return agg
-
-# Analysis for the mean archetype assignment based on the mean coordinates of the archetypes and the behavior data.
-def build_mean_archetype_assignment(mean_coords_df, behavior_df, metadata_cols, all_pca_coords, hormones_df, if_dominant_archetype=False, directory_path=None):
-    # ------------------------------------------------------------------
-    # Mean archetype coordinates
-    # ------------------------------------------------------------------
-    mean_archetypes = (mean_coords_df[['PC1', 'PC2']].to_numpy(dtype=float))
-
-    # ------------------------------------------------------------------
-    # Probability of every day belonging to the mean archetypes
-    # ------------------------------------------------------------------
-    mean_prob_coeffs = compute_archetype_probabilities(all_pca_coords, mean_archetypes)
- 
-    # ------------------------------------------------------------------
-    # Build the standard per-day table
-    # ------------------------------------------------------------------
-    mean_table_df = build_table_df(behavior_df, metadata_cols, all_pca_coords, mean_prob_coeffs)
-
-    # ------------------------------------------------------------------
-    # Aggregate animals and merge hormones
-    # ------------------------------------------------------------------
-    mean_hormones_arch = select_top_and_merge_hormones(mean_table_df, mean_archetypes, hormones_df, if_dominant_archetype)
-
-    if directory_path is not None:
-        mean_table_df.to_excel(os.path.join(directory_path, 'mean_archetype_probabilities_per_day.xlsx'), index=False)
-        mean_hormones_arch.to_excel(os.path.join(directory_path, 'mean_hormones_with_archetypes.xlsx'), index=False)
-
-    return mean_table_df, mean_hormones_arch

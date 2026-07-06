@@ -32,7 +32,7 @@ def setup_iteration_state():
 # input: behavior_df (DataFrame), metadata_cols (list), all_pca_coords (ndarray), prob_coeffs (ndarray)
 # output: table_df (DataFrame) — metadata + PC1/PC2 + archetype probabilities + dominant(gives 1,2,3) archetype label
 def build_table_df(behavior_df, metadata_cols, all_pca_coords, prob_coeffs):
-    
+    from archetype_analysis import compute_archetype_probabilities
     table_df = behavior_df[metadata_cols].copy()
     table_df['PC1'] = all_pca_coords[:, 0]
     table_df['PC2'] = all_pca_coords[:, 1]
@@ -65,7 +65,7 @@ def predict_and_align(hormones_arch, metadata_cols, if_dominant_archetype, mappi
     from archetype_analysis import predict_archetype_loocv
     from alignment.label_alignment import apply_mapping
     loocv_results = predict_archetype_loocv(hormones_arch, metadata_cols, model_names=model_names)
-    if not if_dominant_archetype and mapping is not None:
+    if not if_dominant_archetype:
         for mname, mres in loocv_results.items():
             mres['predictions'] = apply_mapping(mres['predictions'], mapping)
         aligned_true = apply_mapping(hormones_arch['Dominant_archetype'].values, mapping)

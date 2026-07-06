@@ -1,30 +1,23 @@
 from xml.parsers.expat import model
-from sklearn.base import clone
-from archetype_analysis import _get_models
+from sklearn.metrics import make_scorer
+from sklearn.model_selection import permutation_test_score
+from sklearn.base import BaseEstimator, ClassifierMixin
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score, confusion_matrix
 import os
-import pandas as pd
 from alignment.label_alignment import compute_aggregate_confusion
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score
 import shap
-from sklearn.model_selection import LeaveOneOut
-from sklearn.preprocessing import StandardScaler
-from sklearn.utils.class_weight import compute_class_weight
-from matplotlib.patches import Ellipse
-from matplotlib.colors import to_rgba
-from scipy.stats import chi2
 
 
-def setup_figure(model_names=None):
-    if model_names is None:
-        model_names = ['LogReg', 'SVM', 'MLP', 'RandomForest', 'ExtraTrees', 'HistGB', 'XGBoost']
-    n_models = len(model_names)
-    fig = plt.figure(figsize=(5 * (n_models + 1), 14))
+def setup_figure(n_models=4):
+    fig = plt.figure(figsize=(26, 14))
     gs = GridSpec(2, n_models + 1, figure=fig, height_ratios=[1, 1])
     ax_tri = fig.add_subplot(gs[:, 0])
+    model_names = ['LogReg', 'SVM', 'MLP', 'XGBoost'][:n_models]
     cm_axes = {}
     perm_axes = {}
     shap_imp_axes = {}
@@ -113,18 +106,13 @@ def plot_aggregate_confusion(agg_confusion, directory_path, model_names=None):
         axes = [axes]
     for ax, mname in zip(axes, model_names):
         cm = agg_confusion[mname]
-        row_sums = cm.sum(axis=1, keepdims=True)
-        cm_percent = np.divide(cm, row_sums, out=np.zeros_like(cm, dtype=float), where=row_sums != 0) * 100
-        disp = ConfusionMatrixDisplay(cm_percent, display_labels=[1, 2, 3])
-        disp.plot(ax=ax, cmap='Blues', values_format='.1f', colorbar=False, text_kw={'fontsize': 9})
-        for i in range(cm_percent.shape[0]):
-            for j in range(cm_percent.shape[1]):
-                disp.text_[i][j].set_text(f'{cm_percent[i, j]:.1f}%')
+        ConfusionMatrixDisplay(cm, display_labels=[1, 2, 3]).plot(
+            ax=ax, cmap='Blues', values_format='d', colorbar=False, text_kw={'fontsize': 9})
         acc, f1_macro, f1_per = _f1_from_cm(cm)
         subtitle = f'acc={acc:.3f}  F1={f1_macro:.3f}'
         for k, f1k in enumerate(f1_per):
             subtitle += f'  F1_{k+1}={f1k:.3f}'
-        ax.set_title(f'{mname} — aggregate (%)', fontsize=10)
+        ax.set_title(f'{mname} — aggregate', fontsize=10)
         ax.text(0.5, -0.2, subtitle, transform=ax.transAxes, ha='center', fontsize=8)
     plt.tight_layout()
     fname = 'aggregate_confusion.pdf'
@@ -156,7 +144,7 @@ def plot_aggregate_confusion_mean_se(agg_cm_stats, directory_path, model_names=N
                 if i < len(disp.text_) and j < len(disp.text_[i]):
                     mean_val = mean_cm[i, j] * 100
                     std_val = std_cm[i, j] * 100
-                    disp.text_[i][j].set_text(f'{mean_val:.1f}% ± {std_val:.1f}%')
+                    disp.text_[i][j].set_text(f'{mean_val:.2f}% ± {std_val:.2f}%')
 
         summed_cm = mean_cm * n_iter
         acc, f1_macro, f1_per = _f1_from_cm(summed_cm)
@@ -173,92 +161,32 @@ def plot_aggregate_confusion_mean_se(agg_cm_stats, directory_path, model_names=N
     plt.close(fig)
 
 
-def _fit_predict_loocv_for_model(model, model_name, X, y):
+def permutation_test_significance(y_true, y_pred, n_permutations=1000):
     
+    class _FixedPredictor(BaseEstimator, ClassifierMixin):
+        def fit(self, X, y):
+            return self
+        def predict(self, X):
+            return y_pred
+        def score(self, X, y):
+            return f1_score(y, y_pred, average='macro')
 
-    preds = np.empty(len(y), dtype=y.dtype)
-    for train_idx, test_idx in LeaveOneOut().split(X):
-        X_train, X_test = X[train_idx], X[test_idx]
-        y_train = y[train_idx]
-        model_clone = clone(model)
-
-        if model_name in ('HistGB', 'XGBoost'):
-            classes = np.unique(y_train)
-            cw = compute_class_weight('balanced', classes=classes, y=y_train)
-            sample_weights = np.array([cw[list(classes).index(v)] for v in y_train])
-            model_clone.fit(X_train, y_train, sample_weight=sample_weights)
-            preds[test_idx[0]] = model_clone.predict(X_test)[0]
-        elif model_name in ('RandomForest', 'ExtraTrees'):
-            model_clone.fit(X_train, y_train)
-            preds[test_idx[0]] = model_clone.predict(X_test)[0]
-        else:
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
-            if model_name == 'MLP':
-                classes = np.unique(y_train)
-                cw = dict(zip(classes, compute_class_weight('balanced', classes=classes, y=y_train)))
-                sample_weights = np.array([cw[v] for v in y_train])
-                model_clone.fit(X_train_scaled, y_train, sample_weight=sample_weights)
-            else:
-                model_clone.fit(X_train_scaled, y_train)
-            preds[test_idx[0]] = model_clone.predict(X_test_scaled)[0]
-    return preds
-
-
-def permutation_test_significance(X, y_true, model, model_name, observed, n_permutations=200):
-    from sklearn.preprocessing import LabelEncoder
-
-    y_true = np.asarray(y_true)
-    label_encoder = LabelEncoder()
-    y_encoded = label_encoder.fit_transform(y_true)
-    labels = label_encoder.classes_
-
-    rng = np.random.default_rng(0)
-    null_scores = np.zeros(n_permutations)
-    null_per_class = np.zeros((n_permutations, len(labels)))
-    for i in range(n_permutations):
-        y_perm = rng.permutation(y_encoded)
-        perm_pred = label_encoder.inverse_transform(_fit_predict_loocv_for_model(model, model_name, X, y_perm))
-        y_perm_labels = label_encoder.inverse_transform(y_perm)
-        null_scores[i] = f1_score(y_perm_labels, perm_pred, average='macro')
-        null_per_class[i] = f1_score(y_perm_labels, perm_pred, labels=labels, average=None, zero_division=0)
-
-    p_value = (np.sum(null_scores >= observed) + 1) / (n_permutations + 1)
-    return null_scores, null_per_class, p_value
-
-
-def fixed_prediction_permutation_test(y_true, y_pred, n_permutations=1000):
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
     observed = f1_score(y_true, y_pred, average='macro')
-    rng = np.random.default_rng(0)
-    null_scores = np.zeros(n_permutations)
-    for i in range(n_permutations):
-        y_perm = rng.permutation(y_true)
-        null_scores[i] = f1_score(y_perm, y_pred, average='macro')
-    p_value = (np.sum(null_scores >= observed) + 1) / (n_permutations + 1)
+    X_dummy = np.zeros((len(y_true), 1))
+    _, null_scores, p_value = permutation_test_score(_FixedPredictor(), X_dummy, y_true,cv=[(slice(None), slice(None))],
+        n_permutations=n_permutations,
+        scoring=make_scorer(f1_score, average='macro'),
+    )
     return observed, null_scores, p_value
 
 
-def plot_permutation_tests(perm_axes, loocv_results, y_true, hormones_arch, metadata_cols,
-                           model_names=None, n_permutations=50):
-    
-
+def plot_permutation_tests(perm_axes, loocv_results, y_true, n_permutations=1000):
     pvalues = {}
-    feature_cols = [c for c in hormones_arch.columns
-                    if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
-    X = hormones_arch[feature_cols].select_dtypes(include=[np.number]).values
-    model_lookup = _get_models(n_classes=3, model_names=model_names)
     for mname, mres in loocv_results.items():
         ax = perm_axes[mname]
         ax.clear()
-        labels = np.unique(y_true)
-        observed = f1_score(y_true, mres['predictions'], average='macro')
-        observed_per_class = f1_score(y_true, mres['predictions'], labels=labels,
-                                      average=None, zero_division=0)
-        null_scores, null_per_class, p_val = permutation_test_significance(
-            X, y_true, model_lookup[mname], mname, observed, n_permutations)
+        observed, null_scores, p_val = permutation_test_significance(
+            y_true, mres['predictions'], n_permutations)
         pvalues[mname] = p_val
         
         ax.hist(null_scores, bins=30, alpha=0.7, color='gray', edgecolor='black', density=True)
@@ -266,8 +194,7 @@ def plot_permutation_tests(perm_axes, loocv_results, y_true, hormones_arch, meta
         ax.axvline(np.percentile(null_scores, 95), color='orange', linestyle='--', label='95th percentile')
         ax.set_xlabel('F1 macro')
         ax.set_ylabel('Density')
-        per_class_text = ' '.join(f'F1_{i + 1}={score:.3f}' for i, score in enumerate(observed_per_class))
-        ax.set_title(f'{mname}\np={p_val:.4f} F1={observed:.3f}\n{per_class_text}', fontsize=8)
+        ax.set_title(f'{mname}\np={p_val:.4f}', fontsize=8)
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
     return pvalues
@@ -279,42 +206,18 @@ def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_p
     model_names = list(all_preds_by_model[0].keys())
     n = len(model_names)
 
-    from scipy.stats import chi2
-    rng = np.random.RandomState(42)
-
     combined = {}
     for mname in model_names:
         observed_list = []
-        per_iter_pvalues = []
-        nulls = []
-        # Run permutation test per iteration and collect per-iteration p-values + nulls
+        null_list = []
         for yt, entry in zip(all_true, all_preds_by_model):
-            obs, null_scores, p_i = fixed_prediction_permutation_test(yt, entry[mname], n_permutations)
+            obs, null_scores, _ = permutation_test_significance(yt, entry[mname], n_permutations)
             observed_list.append(obs)
-            per_iter_pvalues.append(p_i)
-            nulls.append(null_scores)
-
+            null_list.append(null_scores)
         combined_observed = np.mean(observed_list)
-
-        # Combine per-iteration p-values with Fisher's method (protect against zero p-values)
-        per_iter_pvalues = np.maximum(np.array(per_iter_pvalues), 1.0 / (n_permutations + 1))
-        chi2_stat = -2.0 * np.sum(np.log(per_iter_pvalues))
-        p_fisher = 1.0 - chi2.cdf(chi2_stat, 2 * len(per_iter_pvalues))
-
-        # Build a null distribution for the mean-statistic by sampling from per-iteration nulls.
-        # For each combined sample, pick a random null-score from each iteration's nulls and average them.
-        null_matrix = np.vstack(nulls)  # shape: (n_iterations, n_permutations)
-        n_iter = null_matrix.shape[0]
-        combined_null = np.zeros(n_permutations)
-        for k in range(n_permutations):
-            idxs = rng.randint(0, n_permutations, size=n_iter)
-            combined_null[k] = np.mean(null_matrix[np.arange(n_iter), idxs])
-
-        # empirical p-value comparing observed mean to sampled nulls
-        p_empirical = (np.sum(combined_null >= combined_observed) + 1) / (n_permutations + 1)
-
-        # store both empirical null-based p and Fisher combined p (4-tuple)
-        combined[mname] = (combined_observed, combined_null, p_empirical, p_fisher)
+        combined_null = np.concatenate(null_list)
+        p_val = (np.sum(combined_null >= combined_observed) + 1) / (len(combined_null) + 1)
+        combined[mname] = (combined_observed, combined_null, p_val)
 
     
     agg_confusion = compute_aggregate_confusion(all_true, all_preds_by_model)
@@ -337,7 +240,7 @@ def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_p
         ax_cm.text(0.5, -0.2, subtitle, transform=ax_cm.transAxes, ha='center', fontsize=8)
 
         ax_perm = axes[1, idx]
-        observed, null_scores, p_val, p_fisher = combined[mname]
+        observed, null_scores, p_val = combined[mname]
         ax_perm.hist(null_scores, bins=30, alpha=0.7, color='gray', edgecolor='black', density=True)
         ax_perm.axvline(observed, color='red', linewidth=2, label=f'Observed: {observed:.3f}')
         ax_perm.axvline(np.percentile(null_scores, 95), color='orange', linestyle='--', label='95th percentile')
@@ -422,7 +325,7 @@ def plot_permutation_per_archetype(all_true, all_preds_by_model, directory_path,
 
 def compute_shap_values(model, X, model_name):
     
-        if model_name in ('RandomForest', 'ExtraTrees', 'XGBoost'):
+        if model_name == 'XGBoost':
            explainer = shap.TreeExplainer(model)
         elif model_name in ('LogReg', 'SVM'):
             explainer = shap.LinearExplainer(model, X)
@@ -437,7 +340,6 @@ def train_full_models_and_shap(X_full, y_encoded, feature_cols, shap_imp_axes=No
     from sklearn.linear_model import LogisticRegression
     from sklearn.svm import SVC
     from sklearn.neural_network import MLPClassifier
-    from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
     from xgboost import XGBClassifier
 
     scaler = StandardScaler()
@@ -447,16 +349,13 @@ def train_full_models_and_shap(X_full, y_encoded, feature_cols, shap_imp_axes=No
         'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
         'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000, probability=True),
         'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
-        'RandomForest': RandomForestClassifier(n_estimators=500, class_weight='balanced', random_state=0),
-        'ExtraTrees': ExtraTreesClassifier(n_estimators=500, class_weight='balanced', random_state=0),
-        'HistGB': HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, random_state=0),
         'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
                                   eval_metric='mlogloss', objective='multi:softmax', num_class=3),
     }
 
     shap_results = {}
     for mname, model in full_models.items():
-        if mname in ('RandomForest', 'ExtraTrees', 'HistGB', 'XGBoost'):
+        if mname == 'XGBoost':
             model.fit(X_full, y_encoded)
             shap_vals = compute_shap_values(model, X_full, mname)
         else:
@@ -629,162 +528,3 @@ def plot_permutation_archetype_difference(all_archetype_probs, target_arch=3, n_
         print(f'  Saved permutation archetype difference plot: {save_path}')
 
     return fig, ax, p_value
-
-"""
-    Draws the mean archetype triangle and confidence ellipses.
-
-    accepted_results contains mapped archetypes.
-    """
-def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,confidence=0.95):
-    n_vertices = accepted_results[0]['archetypes'].shape[0]
-    vertex_positions = [[] for _ in range(n_vertices)]
-    # collect aligned archetypes
-    for result in accepted_results:
-        mapping = result["mapping"]
-
-        aligned = np.zeros_like(result["archetypes"])
-
-        for current_idx, ref_idx in enumerate(mapping):
-            aligned[ref_idx] = result["archetypes"][current_idx]
-
-        for v in range(n_vertices):
-            vertex_positions[v].append(aligned[v])
-    means = []
-    covs = []
-
-    for pts in vertex_positions:
-        pts = np.asarray(pts, dtype=float)
-        pts = pts[np.all(np.isfinite(pts), axis=1)]
-
-        if len(pts) == 0:
-            means.append(np.full(all_pca_coords.shape[1], np.nan))
-            covs.append(np.full((all_pca_coords.shape[1], all_pca_coords.shape[1]), np.nan))
-        elif len(pts) == 1:
-            means.append(pts[0])
-            covs.append(np.zeros((pts.shape[1], pts.shape[1])))
-        else:
-            means.append(np.mean(pts, axis=0))
-            covs.append(np.cov(pts.T))
-
-    
-
-
-    fig, ax = plt.subplots(figsize=(8,8))
-
-    ax.scatter(all_pca_coords[:,0],all_pca_coords[:,1], s=8, alpha=.8, color="blue")
-    means = np.asarray(means)
-    mean_coords_df = pd.DataFrame(means, columns=[f'PC{i + 1}' for i in range(means.shape[1])])
-    mean_coords_df.insert(0, 'archetype', np.arange(1, len(means) + 1)) #add archetype column to the dataframe for clarity
-    
-    closed = np.vstack([means, means[0]])
-
-    ax.plot(closed[:,0], closed[:,1], color='black', linestyle='-', lw=3)
-    #compute the scale factor for the confidence ellipse based on the chi-squared distribution
-    scale = np.sqrt(chi2.ppf(confidence, 2))
-    colors = ['pink', 'purple',  'cyan']
-
-    for i, (mean, cov) in enumerate(zip(means, covs)):
-        color = colors[i % len(colors)]
-
-        if not np.all(np.isfinite(mean)) or not np.all(np.isfinite(cov)):
-            print(f"  Skipping confidence ellipse for archetype {i + 1}: invalid mean/covariance")
-            continue
-        # compute eigenvalues and eigenvectors of the covariance matrix
-        #eigenvalues = amount of spread along ellipse axes
-        #eigenvectors = directions of ellipse axes
-        eigvals, eigvecs = np.linalg.eigh(cov)
-
-        order = eigvals.argsort()[::-1]
-
-        eigvals = eigvals[order]
-        eigvecs = eigvecs[:,order]
-
-        if np.any(eigvals < -1e-10):
-            print(f"  Skipping confidence ellipse for archetype {i + 1}: negative covariance eigenvalues {eigvals}")
-            continue
-        eigvals = np.clip(eigvals, 0, None)
-
-        angle = np.degrees(
-            np.arctan2(eigvecs[1,0], eigvecs[0,0])
-        )
-
-        width = 2 * scale * np.sqrt(eigvals[0])
-        height = 2 * scale * np.sqrt(eigvals[1])
-
-        ellipse = Ellipse(mean,
-                          width,
-                          height,
-                          angle=angle,
-                          edgecolor=color,
-                          facecolor=to_rgba(color, 0.18),
-                          lw=2)
-
-        ax.add_patch(ellipse)
-
-        ax.text(mean[0],
-                mean[1],
-                str(i+1),
-                fontsize=14,
-                weight='bold',
-                color=color)
-
-    ax.set_aspect("equal")
-    ax.set_title("Mean archetype triangle")
-
-    plt.tight_layout()
-    plt.savefig(output_file, dpi=300)
-    plt.close()
-    return mean_coords_df
-
-
-def plot_average_confusion_matrices(accepted_results, output_file, model_names=None, labels=None):
-    if not accepted_results:
-        return
-
-    if model_names is None:
-        model_names = list(accepted_results[0]['loocv_results'].keys())
-    if labels is None:
-        n_classes = accepted_results[0]['archetypes'].shape[0]
-        labels = list(range(1, n_classes + 1))
-
-    n_models = len(model_names)
-    fig, axes = plt.subplots(1, n_models, figsize=(5 * n_models, 4))
-    if n_models == 1:
-        axes = [axes]
-
-    for ax, model_name in zip(axes, model_names):
-        normalized_cms = []
-
-        for result in accepted_results:
-            model_result = result['loocv_results'].get(model_name)
-            if model_result is None:
-                continue
-
-            cm = confusion_matrix(result['aligned_true'], model_result['predictions'], labels=labels)
-            row_sums = cm.sum(axis=1, keepdims=True)
-            cm_normalized = np.divide(cm, row_sums, out=np.zeros_like(cm, dtype=float), where=row_sums != 0) #if there are no samples for a class, we avoid division by zero and set the normalized values to zero
-            normalized_cms.append(cm_normalized)
-
-        if not normalized_cms:
-            ax.text(0.5, 0.5, 'No data', transform=ax.transAxes, ha='center', va='center')
-            ax.set_title(model_name)
-            continue
-
-        normalized_cms = np.asarray(normalized_cms)#convert list of normalized confusion matrices to a numpy array for easier computation first is the number of iterations, second is the number of classes, third is the number of classes
-        mean_cm = np.mean(normalized_cms, axis=0) #on the number of iterations axis, we compute the mean confusion matrix across all iterations
-        std_cm = np.std(normalized_cms, axis=0)
-
-        disp = ConfusionMatrixDisplay(mean_cm, display_labels=labels)
-        disp.plot(ax=ax, cmap='Blues', values_format='.1%', colorbar=False, text_kw={'fontsize': 8})
-
-        for row in range(mean_cm.shape[0]):
-            for col in range(mean_cm.shape[1]):
-                disp.text_[row][col].set_text(
-                    f'{mean_cm[row, col] * 100:.1f}%\n±{std_cm[row, col] * 100:.1f}%')
-
-        ax.set_title(f'{model_name} average confusion\n(n={len(normalized_cms)})', fontsize=10)
-
-    fig.tight_layout()
-    fig.savefig(output_file, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print(f'  Saved average confusion matrices: {output_file}')

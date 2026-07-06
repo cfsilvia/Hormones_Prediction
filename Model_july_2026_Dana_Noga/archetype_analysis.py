@@ -1,12 +1,10 @@
 import numpy as np
 import pandas as pd
-import os
 from sklearn.decomposition import PCA
 from py_pcha import PCHA
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
 from xgboost import XGBClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.utils.class_weight import compute_class_weight
@@ -15,7 +13,6 @@ from sklearn.model_selection import LeaveOneOut
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import GridSearchCV
 from scipy.stats import zscore
-from main_utils import build_table_df, select_top_and_merge_hormones
 
 
 # input: df (DataFrame)
@@ -34,21 +31,17 @@ def assign_to_nearest_vertex(pca_coords, archetypes):
     return counts
 
 # input: data_df (DataFrame) — includes metadata and behavior columns
-# output: (pca_model, pca_coords, behavior_cols, pca_metadata_df) — fitted PCA, 2D coordinates, behavior columns, metadata + PCs
+# output: (pca_model, pca_coords, behavior_cols) — fitted PCA, 2D coordinates, column names
 def compute_pca(data_df):
     data_df = _normalize_column_names(data_df)
-    exclude_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal', 'Days']
+    exclude_cols = ['Experiment', 'sex', 'Type', 'Genotype', 'Hierarchy', 'Mice.chips', 'Animal']
     behavior_cols = [c for c in data_df.columns if c not in exclude_cols]
     behavior_data = data_df[behavior_cols].select_dtypes(include=[np.number]).values
     behavior_data = zscore(behavior_data, nan_policy='omit')
     behavior_data = np.nan_to_num(behavior_data)
     pca = PCA(n_components=2)
     pca_coords = pca.fit_transform(behavior_data)
-    metadata_cols = [c for c in exclude_cols if c in data_df.columns]
-    pca_metadata_df = data_df[metadata_cols].copy()
-    pca_metadata_df['PC1'] = pca_coords[:, 0]
-    pca_metadata_df['PC2'] = pca_coords[:, 1]
-    return pca, pca_coords, behavior_cols, pca_metadata_df
+    return pca, pca_coords, behavior_cols
 
 # input: pca (PCA model), data_df (DataFrame), behavior_cols (list of str)
 # output: pca_coords (ndarray) — transformed 2D coordinates for new data
@@ -66,15 +59,7 @@ def apply_pca_transform(pca, data_df, behavior_cols):
 # input: pca_coords_all (ndarray), sample_frac (float)
 # output: (pca_coords, archetypes, varexlp, counts, sample_indices)
 #         — sampled coords, 3 archetype vertices, variance explained, counts, indices used
-def sample_and_fit_archetypes(pca_coords_all, sample_frac=0.8, no_pca_data = None):
-
-    if no_pca_data is not None:
-        coords_to_remove = no_pca_data[['PC1','PC2']].to_numpy(dtype=float)
-        matches = np.isclose(pca_coords_all[:, None, :],coords_to_remove[None, :, :]).all(axis=2).any(axis=1)
-        pca_coords_filtered = pca_coords_all[~matches]
-        pca_coord_all = pca_coords_filtered
-
-
+def sample_and_fit_archetypes(pca_coords_all, sample_frac=0.8):
     n = pca_coords_all.shape[0]
     n_sample = max(int(n * sample_frac), 3)
     sample_indices = np.random.choice(n, n_sample, replace=False)
@@ -97,7 +82,7 @@ def compute_archetype_probabilities(pca_coords, archetypes):
     A_mat = np.vstack([archetypes.T, np.ones(n_arch)])
 
     for i in range(n_points):
-        b = np.array([pca_coords[i, 0], pca_coords[i, 1], 1.0])
+        b = np.append(pca_coords[i], 1.0)
         alpha = np.linalg.lstsq(A_mat, b, rcond=None)[0]
         alpha = np.maximum(alpha, 0)
         s = np.sum(alpha)
@@ -109,61 +94,23 @@ def compute_archetype_probabilities(pca_coords, archetypes):
 
     return probs
 
-def _get_models(n_classes, model_names=None):
-    models = {
-        'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
-        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000),
-        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
-        'RandomForest': RandomForestClassifier(n_estimators=500, class_weight='balanced', random_state=0),
-        'ExtraTrees': ExtraTreesClassifier(n_estimators=500, class_weight='balanced', random_state=0),
-        'XGBoost': XGBClassifier(
-            n_estimators=100,
-            #  tree_method='hist',
-            # device='cuda',
-            random_state=0,
-            eval_metric='mlogloss',
-            objective='multi:softmax',
-            num_class=n_classes
-        ), 
-    #    'HistGB': XGBClassifier(
-    #         n_estimators=100,
-    #         max_depth=2,
-    #         learning_rate=0.05,
-    #         subsample=0.8,
-    #         colsample_bytree=0.8,
-    #         reg_alpha=1.0,
-    #         reg_lambda=1.0,
-    #         min_child_weight=5,
-    #         random_state=0,
-    #         eval_metric='mlogloss',
-    #         objective='multi:softprob',
-    #         num_class=n_classes
-    #     ),
-
-        'HistGB': HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, random_state=0),
-        # 'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
-        #                          eval_metric='mlogloss', objective='multi:softmax', num_class=n_classes),
-    }
-    if model_names is not None:
-        unknown = [name for name in model_names if name not in models]
-        if unknown:
-            raise ValueError(f'Unknown model names: {unknown}')
-        models = {name: models[name] for name in model_names}
-    return models
-
-
-# input: df (DataFrame), metadata_cols (list of str), model_names (list/None)
+# input: df (DataFrame), metadata_cols (list of str)
 # output: results (dict) — per model: predictions list + accuracy from LOOCV
-def predict_archetype_loocv(df, metadata_cols, model_names=None):
-    feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2'
-                    and c not in ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']]
+def predict_archetype_loocv(df, metadata_cols):
+    feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
     X = df[feature_cols].select_dtypes(include=[np.number]).values
     le = LabelEncoder()
     y = le.fit_transform(df['Dominant_archetype'].values)
     n = len(df)
     n_classes = len(le.classes_)
 
-    models = _get_models(n_classes, model_names=model_names)
+    models = {
+        'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
+        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000),
+        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
+        'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
+                                 eval_metric='mlogloss', objective='multi:softmax', num_class=n_classes),
+    }
 
     loo = LeaveOneOut()
     results = {}
@@ -176,14 +123,11 @@ def predict_archetype_loocv(df, metadata_cols, model_names=None):
             y_train = y[train_idx]
             model_clone = model.__class__(**model.get_params())
 
-            if name in ('HistGB', 'XGBoost'):
+            if name == 'XGBoost':
                 classes = np.unique(y_train)
                 cw = compute_class_weight('balanced', classes=classes, y=y_train)
                 sample_weights = np.array([cw[list(classes).index(v)] for v in y_train])
                 model_clone.fit(X_train, y_train, sample_weight=sample_weights)
-                preds[test_idx[0]] = model_clone.predict(X_test)[0]
-            elif name in ('RandomForest', 'ExtraTrees'):
-                model_clone.fit(X_train, y_train)
                 preds[test_idx[0]] = model_clone.predict(X_test)[0]
             else:
                 scaler = StandardScaler()
@@ -209,82 +153,32 @@ def predict_archetype_loocv(df, metadata_cols, model_names=None):
 # output: agg (DataFrame) — one row per animal with dominant archetype, balanced via Hungarian
 def select_top_per_archetype(table_df, archetypes=None, n_per_arch=20):
     group_keys = ['Experiment', 'sex', 'Hierarchy']
+    pc_cols = [c for c in ['PC1', 'PC2', 'PC3'] if c in table_df.columns]
 
     grouped = table_df.groupby(group_keys)
-    agg = grouped.agg(
-        PC1=('PC1', 'mean'),
-        PC2=('PC2', 'mean'),
+    agg_kwargs = {
+        pc: (pc, 'mean') for pc in pc_cols
+    }
+    agg_kwargs.update(
         n_days=('Animal', 'count'),
         cum_arch1=('Archetype1_prob', 'sum'),
         cum_arch2=('Archetype2_prob', 'sum'),
         cum_arch3=('Archetype3_prob', 'sum'),
-    ).reset_index()
+    )
+    agg = grouped.agg(**agg_kwargs).reset_index()
 
-    cum_cols = ['cum_arch1', 'cum_arch2', 'cum_arch3']
-    agg['Dominant_archetype'] = agg[cum_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
+    prob_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
 
     if archetypes is not None:
-        mean_pc = agg[['PC1', 'PC2']].values
-        n_animals = len(agg)
-        n_arch = archetypes.shape[0]
-        total_slots = n_per_arch * n_arch
-        prob_cols = [f'Archetype{i + 1}_prob' for i in range(n_arch)]
+        pc_cols = pc_cols[:archetypes.shape[1]]
+        if len(pc_cols) != archetypes.shape[1]:
+            raise ValueError(f'Expected {archetypes.shape[1]} PC columns, found {len(pc_cols)}')
 
-        arch_probs = compute_archetype_probabilities(mean_pc, archetypes)
-        agg[prob_cols] = arch_probs
- 
-        # This makes the assignment prefer animals with higher mean-PCA probability for each archetype.
-        cost_matrix = np.zeros((n_animals, total_slots))
-        for j in range(n_arch):
-            for k in range(n_per_arch):
-                cost_matrix[:, j * n_per_arch + k] = -arch_probs[:, j]
+        mean_pc = agg[pc_cols].values
+        mean_probs = compute_archetype_probabilities(mean_pc, archetypes)
+        agg[prob_cols] = mean_probs
+        agg['Dominant_archetype'] = agg[prob_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
 
-        row_ind, col_ind = linear_sum_assignment(cost_matrix)
-        selected_archetypes = col_ind // n_per_arch
-
-        agg = agg.iloc[row_ind].copy()
-        agg['Dominant_archetype'] = selected_archetypes + 1
-
-    return agg
-
-# input: table_df (DataFrame)
-# output: agg (DataFrame) — one row per animal, dominant archetype by max cum probability
-def select_top_per_archetype_dominant(table_df):
-    group_keys = ['Experiment', 'sex', 'Hierarchy']
-
-    grouped = table_df.groupby(group_keys)
-    agg = grouped.agg(
-        n_days=('Animal', 'count'),
-        cum_arch1=('Archetype1_prob', 'sum'),
-        cum_arch2=('Archetype2_prob', 'sum'),
-        cum_arch3=('Archetype3_prob', 'sum'),
-    ).reset_index()
-
-    cum_cols = ['cum_arch1', 'cum_arch2', 'cum_arch3']
-    agg['Dominant_archetype'] = agg[cum_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
-
-    return agg
-
-# input: table_df (DataFrame), archetypes (ndarray or None), n_per_arch (int)
-# output: agg (DataFrame) — one row per animal with dominant archetype, balanced via Hungarian
-def select_top_per_archetype_with_distance(table_df, archetypes=None, n_per_arch=20):
-    group_keys = ['Experiment', 'sex', 'Hierarchy']
-
-    grouped = table_df.groupby(group_keys)
-    agg = grouped.agg(
-        PC1=('PC1', 'mean'),
-        PC2=('PC2', 'mean'),
-        n_days=('Animal', 'count'),
-        cum_arch1=('Archetype1_prob', 'sum'),
-        cum_arch2=('Archetype2_prob', 'sum'),
-        cum_arch3=('Archetype3_prob', 'sum'),
-    ).reset_index()
-
-    cum_cols = ['cum_arch1', 'cum_arch2', 'cum_arch3']
-    agg['Dominant_archetype'] = agg[cum_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
-
-    if archetypes is not None:
-        mean_pc = agg[['PC1', 'PC2']].values
         n_animals = len(agg)
         n_arch = archetypes.shape[0]
         total_slots = n_per_arch * n_arch
@@ -303,33 +197,89 @@ def select_top_per_archetype_with_distance(table_df, archetypes=None, n_per_arch
 
         agg = agg.iloc[row_ind].copy()
         agg['Dominant_archetype'] = selected_archetypes + 1
+    else:
+        cum_cols = ['cum_arch1', 'cum_arch2', 'cum_arch3']
+        agg['Dominant_archetype'] = agg[cum_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
 
     return agg
 
-# Analysis for the mean archetype assignment based on the mean coordinates of the archetypes and the behavior data.
-def build_mean_archetype_assignment(mean_coords_df, behavior_df, metadata_cols, all_pca_coords, hormones_df, if_dominant_archetype=False, directory_path=None):
-    # ------------------------------------------------------------------
-    # Mean archetype coordinates
-    # ------------------------------------------------------------------
-    mean_archetypes = (mean_coords_df[['PC1', 'PC2']].to_numpy(dtype=float))
 
-    # ------------------------------------------------------------------
-    # Probability of every day belonging to the mean archetypes
-    # ------------------------------------------------------------------
+
+# input: table_df (DataFrame), archetypes (ndarray or None), n_per_arch (int)
+# output: agg (DataFrame) — one row per animal with dominant archetype, balanced via Hungarian
+def select_top_per_archetype(table_df, archetypes=None, n_per_arch=20):
+    group_keys = ['Experiment', 'sex', 'Hierarchy']
+    pc_cols = [c for c in ['PC1', 'PC2', 'PC3'] if c in table_df.columns]
+
+    grouped = table_df.groupby(group_keys)
+    agg_kwargs = {
+        pc: (pc, 'mean') for pc in pc_cols
+    }
+    agg_kwargs.update(
+        n_days=('Animal', 'count'),
+        cum_arch1=('Archetype1_prob', 'sum'),
+        cum_arch2=('Archetype2_prob', 'sum'),
+        cum_arch3=('Archetype3_prob', 'sum'),
+    )
+    agg = grouped.agg(**agg_kwargs).reset_index()
+
+    prob_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
+
+    if archetypes is not None:
+        pc_cols = pc_cols[:archetypes.shape[1]]
+        if len(pc_cols) != archetypes.shape[1]:
+            raise ValueError(f'Expected {archetypes.shape[1]} PC columns, found {len(pc_cols)}')
+
+        mean_pc = agg[pc_cols].values
+        mean_probs = compute_archetype_probabilities(mean_pc, archetypes)
+        agg[prob_cols] = mean_probs
+        agg['Dominant_archetype'] = agg[prob_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
+
+        n_animals = len(agg)
+        n_arch = archetypes.shape[0]
+        total_slots = n_per_arch * n_arch
+
+        cost_matrix = np.zeros((n_animals, total_slots))
+        for j in range(n_arch):
+            for k in range(n_per_arch):
+                cost_matrix[:, j * n_per_arch + k] = -mean_probs[:, j]
+
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        selected_archetypes = col_ind // n_per_arch
+
+        agg = agg.iloc[row_ind].copy()
+        agg['Dominant_archetype'] = selected_archetypes + 1
+    else:
+        cum_cols = ['cum_arch1', 'cum_arch2', 'cum_arch3']
+        agg['Dominant_archetype'] = agg[cum_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
+
+    return agg
+
+
+# input: mean_coords_df, behavior_df, metadata_cols, all_pca_coords, hormones_df
+# output: (mean_table_df, mean_hormones_arch) using mean archetypes and Hungarian assignment
+def build_mean_archetype_assignment(mean_coords_df, behavior_df, metadata_cols, all_pca_coords, hormones_df, if_dominant_archetype=False):
+    if 'archetype' in mean_coords_df.columns:
+        mean_coords_df = mean_coords_df.sort_values('archetype')
+
+    mean_archetypes = mean_coords_df[['PC1', 'PC2']].to_numpy(dtype=float)
     mean_prob_coeffs = compute_archetype_probabilities(all_pca_coords, mean_archetypes)
- 
-    # ------------------------------------------------------------------
-    # Build the standard per-day table
-    # ------------------------------------------------------------------
-    mean_table_df = build_table_df(behavior_df, metadata_cols, all_pca_coords, mean_prob_coeffs)
 
-    # ------------------------------------------------------------------
-    # Aggregate animals and merge hormones
-    # ------------------------------------------------------------------
-    mean_hormones_arch = select_top_and_merge_hormones(mean_table_df, mean_archetypes, hormones_df, if_dominant_archetype)
+    mean_table_df = behavior_df[metadata_cols].copy()
+    mean_table_df['PC1'] = all_pca_coords[:, 0]
+    mean_table_df['PC2'] = all_pca_coords[:, 1]
+    for arch_idx in range(mean_prob_coeffs.shape[1]):
+        mean_table_df[f'Archetype{arch_idx + 1}_prob'] = mean_prob_coeffs[:, arch_idx]
+    prob_cols = [f'Archetype{i + 1}_prob' for i in range(mean_prob_coeffs.shape[1])]
+    mean_table_df['Dominant_archetype'] = mean_table_df[prob_cols].idxmax(axis=1).str.extract(r'(\d+)').astype(int)
 
-    if directory_path is not None:
-        mean_table_df.to_excel(os.path.join(directory_path, 'mean_archetype_probabilities_per_day.xlsx'), index=False)
-        mean_hormones_arch.to_excel(os.path.join(directory_path, 'mean_hormones_with_archetypes.xlsx'), index=False)
+    mean_top_df = select_top_per_archetype(mean_table_df, mean_archetypes)
+
+    mean_hormones_arch = mean_top_df.merge(
+        hormones_df.drop_duplicates(subset=['Experiment', 'sex', 'Hierarchy']),
+        on=['Experiment', 'sex', 'Hierarchy'], how='inner'
+    )
+    drop_cols = ['n_days', 'cum_arch1', 'cum_arch2', 'cum_arch3']
+    mean_hormones_arch = mean_hormones_arch.drop(columns=[c for c in drop_cols if c in mean_hormones_arch.columns])
 
     return mean_table_df, mean_hormones_arch
