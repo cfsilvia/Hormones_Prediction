@@ -15,7 +15,7 @@ import numpy as np
 from archetype_analysis import (compute_pca, predict_archetype_loocv, sample_and_fit_archetypes,
     compute_archetype_probabilities, build_mean_archetype_assignment)
 from alignment.label_alignment import accumulate_results, apply_mapping
-from plot_utils import (plot_mean_archetype_triangle, plot_average_confusion_matrices,
+from plot_utils import (plot_loocv_confusion_matrices, calculate_loocv_permutation_pvalues, plot_mean_archetype_triangle, plot_average_confusion_matrices,
                         setup_figure, draw_triangle, plot_confusion_matrices)
 from sklearn.metrics import f1_score
 from scipy.optimize import linear_sum_assignment
@@ -333,7 +333,7 @@ def main():
     exclude_pca_data = False
     sample_frac=0.8
     user_models = ['XGBoost'] #['LogReg', 'SVM', 'MLP', 'RandomForest', 'ExtraTrees', 'HistGB', 'XGBoost']
-
+    n_permutations_for_mean_archetype_analysis = 200
     behavior_df, hormones_df = load_data(directory_path)
    
 
@@ -446,7 +446,21 @@ def main():
         plot_average_confusion_matrices(accepted_results,os.path.join(directory_path, "average_confusion_matrices.pdf"),model_names=user_models)
         mean_table_df, mean_hormones_arch = build_mean_archetype_assignment(mean_coords_df=mean_coords_df, behavior_df=behavior_df, metadata_cols=metadata_cols,
             all_pca_coords=all_pca_coords, hormones_df=hormones_df, if_dominant_archetype=state['if_dominant_archetype'], directory_path=directory_path)
-        loocv_results = predict_archetype_loocv(mean_hormones_arch, metadata_cols, model_names= user_models)
+        loocv_results = predict_archetype_loocv_with_shap(mean_hormones_arch, metadata_cols, model_names= user_models)
+        permutation_results = calculate_loocv_permutation_pvalues(
+            mean_hormones_arch,
+            metadata_cols,
+            loocv_results,
+            mean_hormones_arch['Dominant_archetype'].values,
+            model_names=user_models,
+            n_permutations=n_permutations_for_mean_archetype_analysis
+        )
+        plot_loocv_confusion_matrices(
+            loocv_results,
+            mean_hormones_arch['Dominant_archetype'].values,
+            os.path.join(directory_path, 'mean_hormones_loocv_confusion_matrix.pdf'),
+            permutation_results=permutation_results
+        )
 
 
 

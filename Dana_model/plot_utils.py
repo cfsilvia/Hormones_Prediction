@@ -89,6 +89,90 @@ def plot_confusion_matrices(cm_axes, loocv_results, y_true):
     return f1_scores, per_class_f1
 
 
+def plot_loocv_confusion_matrices(loocv_results, y_true, save_path, labels=None, title=None, permutation_results=None):
+    if labels is None:
+        labels = [1, 2, 3]
+    if title is None:
+        title = 'LOOCV Confusion Matrix - Mean Hormones Archetype Prediction'
+
+    n_models = len(loocv_results)
+    has_permutation = permutation_results is not None
+    n_rows = 2 if has_permutation else 1
+    fig, axes = plt.subplots(n_rows, n_models, figsize=(5 * n_models, 4 * n_rows), squeeze=False)
+
+    for col_idx, (model_name, result) in enumerate(loocv_results.items()):
+        ax = axes[0, col_idx]
+        y_pred = result['predictions']
+        cm = confusion_matrix(y_true, y_pred, labels=labels)
+        row_sums = cm.sum(axis=1, keepdims=True)
+        cm_percent = np.divide(cm, row_sums, out=np.zeros_like(cm, dtype=float), where=row_sums != 0)
+        acc = np.mean(np.asarray(y_true) == np.asarray(y_pred))
+        f1_macro = f1_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+        f1_per_class = f1_score(y_true, y_pred, labels=labels, average=None, zero_division=0)
+        f1_text = ' '.join(f'F{label}={score:.3f}' for label, score in zip(labels, f1_per_class))
+        p_text = ''
+        if permutation_results is not None and model_name in permutation_results:
+            model_perm = permutation_results[model_name]
+            p_value = model_perm['p_value'] if isinstance(model_perm, dict) else model_perm
+            p_text = f', p={p_value:.4f}'
+
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm_percent, display_labels=labels)
+        disp.plot(ax=ax, cmap='Blues', colorbar=False, values_format='.1%')
+        ax.set_title(f'{model_name}\nAcc={acc:.3f}, F1={f1_macro:.3f}{p_text}\n{f1_text}')
+
+        if has_permutation:
+            perm_ax = axes[1, col_idx]
+            model_perm = permutation_results.get(model_name)
+            if model_perm is None:
+                perm_ax.axis('off')
+                continue
+
+            null_scores = model_perm['null_scores']
+            observed = model_perm['observed']
+            p_value = model_perm['p_value']
+
+            perm_ax.hist(null_scores, bins=30, alpha=0.7, color='gray', edgecolor='black', density=True)
+            perm_ax.axvline(observed, color='red', linewidth=2, label=f'Observed: {observed:.3f}')
+            perm_ax.axvline(np.percentile(null_scores, 95), color='orange', linestyle='--', label='95th percentile')
+            perm_ax.set_xlabel('F1 macro')
+            perm_ax.set_ylabel('Density')
+            perm_ax.set_title(f'{model_name} permutation\np={p_value:.4f}', fontsize=10)
+            perm_ax.legend(fontsize=8)
+            perm_ax.grid(True, alpha=0.3)
+
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f'  Saved LOOCV confusion matrix: {save_path}')
+
+
+def calculate_loocv_permutation_pvalues(hormones_arch, metadata_cols, loocv_results, y_true,
+                                        model_names=None, n_permutations=200):
+    feature_cols = [c for c in hormones_arch.columns
+                    if c not in metadata_cols and c != 'Dominant_archetype'
+                    and c != 'PC1' and c != 'PC2'
+                    and c not in ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']]
+    X = hormones_arch[feature_cols].select_dtypes(include=[np.number]).values
+    labels = np.unique(y_true)
+    model_lookup = _get_models(n_classes=len(labels), model_names=model_names)
+    permutation_results = {}
+
+    for model_name, result in loocv_results.items():
+        observed = f1_score(y_true, result['predictions'], labels=labels,
+                            average='macro', zero_division=0)
+        null_scores, null_per_class, p_value = permutation_test_significance(
+            X, y_true, model_lookup[model_name], model_name, observed, n_permutations)
+        permutation_results[model_name] = {
+            'p_value': p_value,
+            'observed': observed,
+            'null_scores': null_scores,
+            'null_per_class': null_per_class,
+        }
+
+    return permutation_results
+
+
 def _f1_from_cm(cm):
     n = cm.shape[0]
     f1_per = []

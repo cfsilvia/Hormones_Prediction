@@ -5,6 +5,7 @@ from py_pcha import PCHA
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
 from xgboost import XGBClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.utils.class_weight import compute_class_weight
@@ -94,23 +95,129 @@ def compute_archetype_probabilities(pca_coords, archetypes):
 
     return probs
 
-# input: df (DataFrame), metadata_cols (list of str)
+def _get_archetype_feature_data(df, metadata_cols):
+    excluded_cols = set(metadata_cols) | {'Dominant_archetype', 'PC1', 'PC2', 'PC3'}
+    excluded_cols.update(c for c in df.columns if c.startswith('Archetype') and c.endswith('_prob'))
+    excluded_cols.update(c for c in df.columns if c.startswith('cum_arch'))
+    feature_df = df[[c for c in df.columns if c not in excluded_cols]].select_dtypes(include=[np.number])
+    if feature_df.empty:
+        raise ValueError('No numeric feature columns found for archetype prediction')
+    return feature_df, list(feature_df.columns)
+
+
+def _get_models(n_classes, model_names=None):
+    models = {
+        'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
+        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000),
+        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
+        'RandomForest': RandomForestClassifier(n_estimators=500, class_weight='balanced', random_state=0),
+        'ExtraTrees': ExtraTreesClassifier(n_estimators=500, class_weight='balanced', random_state=0),
+        'HistGB': HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, random_state=0),
+        'XGBoost': XGBClassifier(
+            n_estimators=100,
+            random_state=0,
+            eval_metric='mlogloss',
+            objective='multi:softmax',
+            num_class=n_classes,
+        ),
+    }
+    if model_names is not None:
+        unknown = [name for name in model_names if name not in models]
+        if unknown:
+            raise ValueError(f'Unknown model names: {unknown}')
+        models = {name: models[name] for name in model_names}
+    return models
+
+
+def _fit_predict_archetype_model(name, model, X_train, X_test, y_train):
+    model_clone = model.__class__(**model.get_params())
+
+    if name in ('HistGB', 'XGBoost'):
+        classes = np.unique(y_train)
+        cw = compute_class_weight('balanced', classes=classes, y=y_train)
+        sample_weights = np.array([cw[list(classes).index(v)] for v in y_train])
+        model_clone.fit(X_train, y_train, sample_weight=sample_weights)
+        pred = model_clone.predict(X_test)[0]
+        return model_clone, X_train, X_test, pred
+
+    if name in ('RandomForest', 'ExtraTrees'):
+        model_clone.fit(X_train, y_train)
+        pred = model_clone.predict(X_test)[0]
+        return model_clone, X_train, X_test, pred
+
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    if name == 'MLP':
+        classes = np.unique(y_train)
+        cw = dict(zip(classes, compute_class_weight('balanced', classes=classes, y=y_train)))
+        sample_weights = np.array([cw[v] for v in y_train])
+        model_clone.fit(X_train_scaled, y_train, sample_weight=sample_weights)
+    else:
+        model_clone.fit(X_train_scaled, y_train)
+    pred = model_clone.predict(X_test_scaled)[0]
+    return model_clone, X_train_scaled, X_test_scaled, pred
+
+
+def _normalize_shap_values(shap_values, n_samples, n_features, n_classes):
+    if isinstance(shap_values, list):
+        return np.stack(shap_values, axis=2)
+
+    shap_array = np.asarray(shap_values)
+    if shap_array.ndim == 2:
+        return shap_array
+    if shap_array.ndim != 3:
+        raise ValueError(f'Unsupported SHAP values shape: {shap_array.shape}')
+
+    if shap_array.shape[0] == n_samples and shap_array.shape[1] == n_features:
+        return shap_array
+    if shap_array.shape[0] == n_classes and shap_array.shape[1] == n_samples and shap_array.shape[2] == n_features:
+        return np.transpose(shap_array, (1, 2, 0))
+    if shap_array.shape[0] == n_samples and shap_array.shape[2] == n_features:
+        return np.transpose(shap_array, (0, 2, 1))
+    return shap_array
+
+
+def _predicted_class_shap(shap_values, pred_class):
+    if shap_values.ndim == 2:
+        return shap_values[0]
+    return shap_values[0, :, pred_class]
+
+
+def _compute_shap_for_test_sample(model, X_background, X_test, model_name, n_classes):
+    try:
+        import shap
+    except ImportError as exc:
+        raise ImportError('predict_archetype_loocv_with_shap requires the shap package') from exc
+
+    if model_name in ('RandomForest', 'ExtraTrees', 'XGBoost'):
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_test)
+        expected_value = getattr(explainer, 'expected_value', None)
+    elif model_name in ('LogReg', 'SVM'):
+        explainer = shap.LinearExplainer(model, X_background)
+        shap_values = explainer.shap_values(X_test)
+        expected_value = getattr(explainer, 'expected_value', None)
+    else:
+        explainer = shap.PermutationExplainer(model.predict_proba, X_background)
+        explanation = explainer(X_test, max_evals=2 * X_background.shape[1] + 1)
+        shap_values = explanation.values
+        expected_value = explanation.base_values
+
+    return _normalize_shap_values(shap_values, X_test.shape[0], X_test.shape[1], n_classes), expected_value
+
+
+# input: df (DataFrame), metadata_cols (list of str), model_names (list/None)
 # output: results (dict) — per model: predictions list + accuracy from LOOCV
-def predict_archetype_loocv(df, metadata_cols):
-    feature_cols = [c for c in df.columns if c not in metadata_cols and c != 'Dominant_archetype' and c != 'PC1' and c != 'PC2']
-    X = df[feature_cols].select_dtypes(include=[np.number]).values
+def predict_archetype_loocv(df, metadata_cols, model_names=None):
+    feature_df, feature_cols = _get_archetype_feature_data(df, metadata_cols)
+    X = feature_df.values
     le = LabelEncoder()
     y = le.fit_transform(df['Dominant_archetype'].values)
     n = len(df)
     n_classes = len(le.classes_)
 
-    models = {
-        'LogReg': LogisticRegression(max_iter=2000, class_weight='balanced'),
-        'SVM': SVC(kernel='linear', class_weight='balanced', max_iter=10000),
-        'MLP': MLPClassifier(max_iter=2000, hidden_layer_sizes=(30,), alpha=0.1),
-        'XGBoost': XGBClassifier(n_estimators=100, random_state=0,
-                                 eval_metric='mlogloss', objective='multi:softmax', num_class=n_classes),
-    }
+    models = _get_models(n_classes, model_names=model_names)
 
     loo = LeaveOneOut()
     results = {}
@@ -121,31 +228,79 @@ def predict_archetype_loocv(df, metadata_cols):
         for train_idx, test_idx in loo.split(X):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train = y[train_idx]
-            model_clone = model.__class__(**model.get_params())
-
-            if name == 'XGBoost':
-                classes = np.unique(y_train)
-                cw = compute_class_weight('balanced', classes=classes, y=y_train)
-                sample_weights = np.array([cw[list(classes).index(v)] for v in y_train])
-                model_clone.fit(X_train, y_train, sample_weight=sample_weights)
-                preds[test_idx[0]] = model_clone.predict(X_test)[0]
-            else:
-                scaler = StandardScaler()
-                X_train_scaled = scaler.fit_transform(X_train)
-                X_test_scaled = scaler.transform(X_test)
-                if name == 'MLP':
-                    classes = np.unique(y_train)
-                    cw = dict(zip(classes, compute_class_weight('balanced', classes=classes, y=y_train)))
-                    sample_weights = np.array([cw[v] for v in y_train])
-                    model_clone.fit(X_train_scaled, y_train, sample_weight=sample_weights)
-                else:
-                    model_clone.fit(X_train_scaled, y_train)
-                preds[test_idx[0]] = model_clone.predict(X_test_scaled)[0]
+            _, _, _, pred = _fit_predict_archetype_model(name, model, X_train, X_test, y_train)
+            preds[test_idx[0]] = pred
 
         preds_orig = le.inverse_transform(preds)
         y_orig = le.inverse_transform(y)
         acc = np.mean(preds_orig == y_orig)
-        results[name] = {'predictions': preds_orig, 'accuracy': acc}
+        results[name] = {'predictions': preds_orig, 'accuracy': acc, 'feature_cols': feature_cols}
+
+    return results
+
+
+# input: df (DataFrame), metadata_cols (list of str), model_names (list/None), top_n (int)
+# output: results (dict) — per model: LOOCV predictions, accuracy, and per-fold SHAP explanations
+def predict_archetype_loocv_with_shap(df, metadata_cols, model_names=None, top_n=5):
+    feature_df, feature_cols = _get_archetype_feature_data(df, metadata_cols)
+    X = feature_df.values
+    le = LabelEncoder()
+    y = le.fit_transform(df['Dominant_archetype'].values)
+    n = len(df)
+    n_classes = len(le.classes_)
+
+    models = _get_models(n_classes, model_names=model_names)
+    loo = LeaveOneOut()
+    results = {}
+
+    for name, model in models.items():
+        preds = np.empty(n, dtype=int)
+        shap_pred_class = np.empty((n, len(feature_cols)), dtype=float)
+        shap_all_classes = []
+        expected_values = []
+        explanations = []
+
+        for fold_idx, (train_idx, test_idx) in enumerate(loo.split(X), start=1):
+            test_pos = test_idx[0]
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train = y[train_idx]
+            model_clone, shap_background, shap_test, pred = _fit_predict_archetype_model(
+                name, model, X_train, X_test, y_train,
+            )
+            preds[test_pos] = pred
+
+            shap_values, expected_value = _compute_shap_for_test_sample(
+                model_clone, shap_background, shap_test, name, n_classes,
+            )
+            pred_shap = _predicted_class_shap(shap_values, pred)
+            shap_pred_class[test_pos] = pred_shap
+            shap_all_classes.append(shap_values[0] if shap_values.ndim == 3 else shap_values[0])
+            expected_values.append(expected_value)
+
+            order = np.argsort(np.abs(pred_shap))[::-1][:top_n]
+            explanations.append({
+                'iteration': fold_idx,
+                'row_index': df.index[test_pos],
+                'true_label': le.inverse_transform([y[test_pos]])[0],
+                'predicted_label': le.inverse_transform([pred])[0],
+                'top_features': [feature_cols[i] for i in order],
+                'top_shap_values': pred_shap[order].tolist(),
+                'top_feature_values': X_test[0, order].tolist(),
+            })
+
+        preds_orig = le.inverse_transform(preds)
+        y_orig = le.inverse_transform(y)
+        acc = np.mean(preds_orig == y_orig)
+        results[name] = {
+            'predictions': preds_orig,
+            'true_labels': y_orig,
+            'accuracy': acc,
+            'feature_cols': feature_cols,
+            'shap_values': shap_pred_class,
+            'shap_values_all_classes': np.array(shap_all_classes, dtype=object),
+            'expected_values': expected_values,
+            'explanations': pd.DataFrame(explanations),
+        }
 
     return results
 
