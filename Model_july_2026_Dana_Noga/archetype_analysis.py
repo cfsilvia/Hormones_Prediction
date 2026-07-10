@@ -13,6 +13,7 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.model_selection import LeaveOneOut
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
 from scipy.stats import zscore
 
 
@@ -159,6 +160,94 @@ def _fit_predict_archetype_model(name, model, X_train, X_test, y_train):
     return model_clone, X_train_scaled, X_test_scaled, pred
 
 
+def _as_label_key(label):
+    return str(label.item() if hasattr(label, 'item') else label)
+
+
+def _sigmoid(values):
+    values = np.asarray(values, dtype=float)
+    return 1.0 / (1.0 + np.exp(-values))
+
+
+def _softmax(values):
+    values = np.asarray(values, dtype=float)
+    values = values - np.max(values)
+    exp_values = np.exp(values)
+    total = np.sum(exp_values)
+    if total == 0:
+        return np.ones_like(values) / len(values)
+    return exp_values / total
+
+
+def _predict_class_scores(model, X_test, n_classes, pred_class):
+    if hasattr(model, 'predict_proba'):
+        try:
+            raw_scores = np.asarray(model.predict_proba(X_test))[0]
+            scores = np.zeros(n_classes, dtype=float)
+            classes = getattr(model, 'classes_', np.arange(len(raw_scores)))
+            for score_idx, class_idx in enumerate(classes):
+                if int(class_idx) < n_classes:
+                    scores[int(class_idx)] = raw_scores[score_idx]
+            return scores
+        except Exception:
+            pass
+
+    if hasattr(model, 'decision_function'):
+        try:
+            raw_scores = np.asarray(model.decision_function(X_test))
+            raw_scores = raw_scores[0] if raw_scores.ndim > 1 else raw_scores
+            classes = getattr(model, 'classes_', np.arange(n_classes))
+
+            if raw_scores.ndim == 0 or raw_scores.shape[0] == 1:
+                prob_positive = float(np.ravel(_sigmoid(raw_scores))[0])
+                scores = np.zeros(n_classes, dtype=float)
+                if len(classes) == 2:
+                    scores[int(classes[0])] = 1.0 - prob_positive
+                    scores[int(classes[1])] = prob_positive
+                else:
+                    scores[pred_class] = 1.0
+                return scores
+
+            scores = np.full(n_classes, np.min(raw_scores) - 1.0, dtype=float)
+            for score_idx, class_idx in enumerate(classes):
+                if int(class_idx) < n_classes:
+                    scores[int(class_idx)] = raw_scores[score_idx]
+            return _softmax(scores)
+        except Exception:
+            pass
+
+    scores = np.zeros(n_classes, dtype=float)
+    scores[pred_class] = 1.0
+    return scores
+
+
+def _compute_classification_metrics(y_true, y_pred, class_scores, class_labels):
+    labels = np.arange(len(class_labels))
+    precision_per_class = precision_score(y_true, y_pred, labels=labels, average=None, zero_division=0)
+    recall_per_class = recall_score(y_true, y_pred, labels=labels, average=None, zero_division=0)
+    f1_per_class = f1_score(y_true, y_pred, labels=labels, average=None, zero_division=0)
+
+    roc_auc_per_class = []
+    for class_idx in labels:
+        binary_true = (y_true == class_idx).astype(int)
+        if len(np.unique(binary_true)) < 2:
+            roc_auc_per_class.append(np.nan)
+        else:
+            roc_auc_per_class.append(roc_auc_score(binary_true, class_scores[:, class_idx]))
+    roc_auc_per_class = np.array(roc_auc_per_class, dtype=float)
+    roc_auc_macro = np.nanmean(roc_auc_per_class) if np.any(~np.isnan(roc_auc_per_class)) else np.nan
+
+    label_keys = [_as_label_key(label) for label in class_labels]
+    return {
+        'f1_macro': f1_score(y_true, y_pred, labels=labels, average='macro', zero_division=0),
+        'f1_per_class': dict(zip(label_keys, f1_per_class.tolist())),
+        'precision_per_class': dict(zip(label_keys, precision_per_class.tolist())),
+        'recall_per_class': dict(zip(label_keys, recall_per_class.tolist())),
+        'roc_auc_ovr_macro': roc_auc_macro,
+        'roc_auc_per_class': dict(zip(label_keys, roc_auc_per_class.tolist())),
+    }
+
+
 def _normalize_shap_values(shap_values, n_samples, n_features, n_classes):
     if isinstance(shap_values, list):
         return np.stack(shap_values, axis=2)
@@ -239,15 +328,16 @@ def predict_archetype_loocv(df, metadata_cols, model_names=None):
     return results
 
 
-# input: df (DataFrame), metadata_cols (list of str), model_names (list/None), top_n (int)
+# input: df (DataFrame), metadata_cols (list of str), model_names (list/None), top_n (int/None)
 # output: results (dict) — per model: LOOCV predictions, accuracy, and per-fold SHAP explanations
-def predict_archetype_loocv_with_shap(df, metadata_cols, model_names=None, top_n=5):
+def predict_archetype_loocv_with_shap(df, metadata_cols, model_names=None, top_n=None):
     feature_df, feature_cols = _get_archetype_feature_data(df, metadata_cols)
     X = feature_df.values
     le = LabelEncoder()
     y = le.fit_transform(df['Dominant_archetype'].values)
     n = len(df)
     n_classes = len(le.classes_)
+    class_labels = le.classes_
 
     models = _get_models(n_classes, model_names=model_names)
     loo = LeaveOneOut()
@@ -255,6 +345,7 @@ def predict_archetype_loocv_with_shap(df, metadata_cols, model_names=None, top_n
 
     for name, model in models.items():
         preds = np.empty(n, dtype=int)
+        class_scores = np.zeros((n, n_classes), dtype=float)
         shap_pred_class = np.empty((n, len(feature_cols)), dtype=float)
         shap_all_classes = []
         expected_values = []
@@ -268,6 +359,7 @@ def predict_archetype_loocv_with_shap(df, metadata_cols, model_names=None, top_n
                 name, model, X_train, X_test, y_train,
             )
             preds[test_pos] = pred
+            class_scores[test_pos] = _predict_class_scores(model_clone, shap_test, n_classes, pred)
 
             shap_values, expected_value = _compute_shap_for_test_sample(
                 model_clone, shap_background, shap_test, name, n_classes,
@@ -277,7 +369,9 @@ def predict_archetype_loocv_with_shap(df, metadata_cols, model_names=None, top_n
             shap_all_classes.append(shap_values[0] if shap_values.ndim == 3 else shap_values[0])
             expected_values.append(expected_value)
 
-            order = np.argsort(np.abs(pred_shap))[::-1][:top_n]
+            order = np.argsort(np.abs(pred_shap))[::-1]
+            if top_n is not None:
+                order = order[:top_n]
             explanations.append({
                 'iteration': fold_idx,
                 'row_index': df.index[test_pos],
@@ -291,10 +385,20 @@ def predict_archetype_loocv_with_shap(df, metadata_cols, model_names=None, top_n
         preds_orig = le.inverse_transform(preds)
         y_orig = le.inverse_transform(y)
         acc = np.mean(preds_orig == y_orig)
+        metrics = _compute_classification_metrics(y, preds, class_scores, class_labels)
         results[name] = {
             'predictions': preds_orig,
             'true_labels': y_orig,
+            'metadata': df[metadata_cols].copy(),
             'accuracy': acc,
+            'f1_macro': metrics['f1_macro'],
+            'f1_per_class': metrics['f1_per_class'],
+            'precision_per_class': metrics['precision_per_class'],
+            'recall_per_class': metrics['recall_per_class'],
+            'roc_auc': metrics['roc_auc_ovr_macro'],
+            'roc_auc_ovr_macro': metrics['roc_auc_ovr_macro'],
+            'roc_auc_per_class': metrics['roc_auc_per_class'],
+            'class_scores': class_scores,
             'feature_cols': feature_cols,
             'shap_values': shap_pred_class,
             'shap_values_all_classes': np.array(shap_all_classes, dtype=object),

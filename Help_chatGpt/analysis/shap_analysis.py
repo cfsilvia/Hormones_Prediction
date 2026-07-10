@@ -53,6 +53,26 @@ class   ShapAnalysis:
                      combined = class_shap
 
                  combined.to_excel(writer, sheet_name=f"Class_{self.class_names[class_idx]}", index=False)
+
+             mean_abs_shap = np.mean(np.abs(shap_values.values), axis=(0, 2))
+             mean_shap = np.mean(shap_values.values, axis=(0, 2))
+             total_importance = np.sum(mean_abs_shap)
+             importance_percent = (
+                 mean_abs_shap / total_importance * 100 if total_importance else np.zeros_like(mean_abs_shap)
+             )
+             direction = np.where(
+                 mean_shap > 0,
+                 "increases prediction",
+                 np.where(mean_shap < 0, "decreases prediction", "no average direction"),
+             )
+             importance_df = pd.DataFrame({
+                 "Feature": self.feature_names,
+                 "Mean Abs SHAP": mean_abs_shap,
+                 "Importance %": importance_percent,
+                 "Mean SHAP": mean_shap,
+                 "Direction": direction,
+             }).sort_values(by="Mean Abs SHAP", ascending=False)
+             importance_df.to_excel(writer, sheet_name="feature_importance", index=False)
          print(f"\nSaved SHAP values to: {shap_excel_path}")
 
           # ====================================================

@@ -7,8 +7,8 @@ import os
 def load_data(directory_path):
     behavior_every_day_file = 'Behavior_every_day.xlsx'
     hormones = 'Hormones.xlsx'
-    behavior_every_day_df = pd.read_excel(f'{directory_path}/{behavior_every_day_file}')
-    hormones_df = pd.read_excel(f'{directory_path}/{hormones}')
+    behavior_every_day_df = pd.read_excel(os.path.join(directory_path, 'data_to_use', behavior_every_day_file))
+    hormones_df = pd.read_excel(os.path.join(directory_path, 'data_to_use', hormones))
     return behavior_every_day_df, hormones_df
 
 # input: behavior_cols (list of str), directory_path (str)

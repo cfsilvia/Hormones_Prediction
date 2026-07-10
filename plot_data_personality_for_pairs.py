@@ -345,6 +345,24 @@ class plot_data_personality_for_pairs:
         full_df = pd.concat([mice_info,shap_df], axis=1)
         male_df = full_df[mice_info["sex"] == "male"]
         female_df = full_df[mice_info["sex"] == "female"]
+        mean_abs_shap = np.mean(np.abs(shap_values), axis=0)
+        mean_shap = np.mean(shap_values, axis=0)
+        total_importance = np.sum(mean_abs_shap)
+        importance_percent = (
+            mean_abs_shap / total_importance * 100 if total_importance else np.zeros_like(mean_abs_shap)
+        )
+        direction = np.where(
+            mean_shap > 0,
+            "increases prediction",
+            np.where(mean_shap < 0, "decreases prediction", "no average direction"),
+        )
+        importance_df = pd.DataFrame({
+            "Feature": X.columns,
+            "Mean Abs SHAP": mean_abs_shap,
+            "Importance %": importance_percent,
+            "Mean SHAP": mean_shap,
+            "Direction": direction,
+        }).sort_values(by="Mean Abs SHAP", ascending=False)
         
         #save to excel to each arch
         save_path = os.path.join(self.output_dir, f"{self.model_name}_{arch_name}_shap_values.xlsx")
@@ -354,6 +372,7 @@ class plot_data_personality_for_pairs:
                 full_df.to_excel(writer, sheet_name="all_data", index=False)
                 male_df.to_excel(writer, sheet_name="males", index=False)
                 female_df.to_excel(writer, sheet_name="females", index=False)
+                importance_df.to_excel(writer, sheet_name="feature_importance", index=False)
 
         print(f"Saved Excel → {save_path}")
     

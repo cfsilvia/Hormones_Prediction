@@ -3,19 +3,79 @@ from sklearn.base import clone
 from archetype_analysis import _get_models
 import numpy as np
 import matplotlib.pyplot as plt
+plt.rcParams.update({
+    'pdf.fonttype': 42,
+    'ps.fonttype': 42,
+    'svg.fonttype': 'none',
+    'pdf.use14corefonts': False,
+    'image.composite_image': False,
+})
 from matplotlib.gridspec import GridSpec
-from sklearn.metrics import ConfusionMatrixDisplay, f1_score, confusion_matrix
+from matplotlib.cm import ScalarMappable
+from sklearn.metrics import f1_score, confusion_matrix
 import os
 import pandas as pd
 from alignment.label_alignment import compute_aggregate_confusion
-from sklearn.metrics import ConfusionMatrixDisplay, f1_score
 import shap
 from sklearn.model_selection import LeaveOneOut
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils.class_weight import compute_class_weight
-from matplotlib.patches import Ellipse
-from matplotlib.colors import to_rgba
-from scipy.stats import chi2
+from matplotlib.patches import Ellipse, Rectangle
+from matplotlib.colors import Normalize, to_rgba
+from scipy.stats import chi2, pearsonr
+from statsmodels.stats.multitest import multipletests
+
+
+def _disable_rasterization(fig):
+    for artist in fig.findobj():
+        if hasattr(artist, 'set_rasterized'):
+            artist.set_rasterized(False)
+
+
+def _draw_vector_matrix(ax, values, labels=None, cmap='Blues', vmin=None, vmax=None,
+                        text_labels=None, text_format='.1%', text_size=9):
+    values = np.asarray(values, dtype=float)
+    n_rows, n_cols = values.shape
+    cmap_obj = plt.get_cmap(cmap)
+    finite_values = values[np.isfinite(values)]
+    if vmin is None:
+        vmin = float(np.nanmin(finite_values)) if finite_values.size else 0.0
+    if vmax is None:
+        vmax = float(np.nanmax(finite_values)) if finite_values.size else 1.0
+    if vmin == vmax:
+        vmax = vmin + 1.0
+
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    for row in range(n_rows):
+        for col in range(n_cols):
+            value = values[row, col]
+            facecolor = cmap_obj(norm(value)) if np.isfinite(value) else 'white'
+            ax.add_patch(Rectangle((col - 0.5, row - 0.5), 1, 1,
+                                   facecolor=facecolor, edgecolor='white', linewidth=1))
+
+            label = None
+            if text_labels is not None:
+                label = text_labels[row][col]
+            elif np.isfinite(value):
+                label = format(value, text_format)
+            if label:
+                text_color = 'white' if norm(value) > 0.55 else 'black'
+                ax.text(col, row, label, ha='center', va='center',
+                        color=text_color, fontsize=text_size)
+
+    if labels is not None:
+        ax.set_xticks(np.arange(n_cols))
+        ax.set_yticks(np.arange(n_rows))
+        ax.set_xticklabels(labels)
+        ax.set_yticklabels(labels)
+    ax.set_xlim(-0.5, n_cols - 0.5)
+    ax.set_ylim(n_rows - 0.5, -0.5)
+    ax.set_aspect('equal')
+    ax.tick_params(length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    return ScalarMappable(norm=norm, cmap=cmap_obj)
 
 
 def setup_figure(model_names=None):
@@ -82,8 +142,8 @@ def plot_confusion_matrices(cm_axes, loocv_results, y_true):
         cm = confusion_matrix(y_true, mres['predictions'], labels=[1, 2, 3])
         cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] 
 
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm_normalized, display_labels=[1, 2, 3])
-        disp.plot(ax=ax, cmap='Blues', colorbar=False, text_kw={'fontsize': 9}, values_format = '.1%')
+        _draw_vector_matrix(ax, cm_normalized, labels=[1, 2, 3], cmap='Blues',
+                            vmin=0, vmax=1, text_format='.1%', text_size=9)
 
         ax.set_title(f'{mname}  acc={mres["accuracy"]:.3f}  F1={f1_macro:.3f}', fontsize=10)
     return f1_scores, per_class_f1
@@ -116,8 +176,8 @@ def plot_loocv_confusion_matrices(loocv_results, y_true, save_path, labels=None,
             p_value = model_perm['p_value'] if isinstance(model_perm, dict) else model_perm
             p_text = f', p={p_value:.4f}'
 
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm_percent, display_labels=labels)
-        disp.plot(ax=ax, cmap='Blues', colorbar=False, values_format='.1%')
+        _draw_vector_matrix(ax, cm_percent, labels=labels, cmap='Blues',
+                            vmin=0, vmax=1, text_format='.1%', text_size=9)
         ax.set_title(f'{model_name}\nAcc={acc:.3f}, F1={f1_macro:.3f}{p_text}\n{f1_text}')
 
         if has_permutation:
@@ -142,6 +202,7 @@ def plot_loocv_confusion_matrices(loocv_results, y_true, save_path, labels=None,
 
     fig.suptitle(title)
     fig.tight_layout()
+    _disable_rasterization(fig)
     fig.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f'  Saved LOOCV confusion matrix: {save_path}')
@@ -199,11 +260,10 @@ def plot_aggregate_confusion(agg_confusion, directory_path, model_names=None):
         cm = agg_confusion[mname]
         row_sums = cm.sum(axis=1, keepdims=True)
         cm_percent = np.divide(cm, row_sums, out=np.zeros_like(cm, dtype=float), where=row_sums != 0) * 100
-        disp = ConfusionMatrixDisplay(cm_percent, display_labels=[1, 2, 3])
-        disp.plot(ax=ax, cmap='Blues', values_format='.1f', colorbar=False, text_kw={'fontsize': 9})
-        for i in range(cm_percent.shape[0]):
-            for j in range(cm_percent.shape[1]):
-                disp.text_[i][j].set_text(f'{cm_percent[i, j]:.1f}%')
+        text_labels = [[f'{cm_percent[i, j]:.1f}%' for j in range(cm_percent.shape[1])]
+                       for i in range(cm_percent.shape[0])]
+        _draw_vector_matrix(ax, cm_percent, labels=[1, 2, 3], cmap='Blues',
+                            vmin=0, vmax=100, text_labels=text_labels, text_size=9)
         acc, f1_macro, f1_per = _f1_from_cm(cm)
         subtitle = f'acc={acc:.3f}  F1={f1_macro:.3f}'
         for k, f1k in enumerate(f1_per):
@@ -213,13 +273,13 @@ def plot_aggregate_confusion(agg_confusion, directory_path, model_names=None):
     plt.tight_layout()
     fname = 'aggregate_confusion.pdf'
     save_path = os.path.join(directory_path, fname)
+    _disable_rasterization(fig)
     fig.savefig(save_path, dpi=150, bbox_inches='tight')
     print(f'  Saved aggregate confusion: {fname}')
     plt.close(fig)
 
 
 def plot_aggregate_confusion_mean_se(agg_cm_stats, directory_path, model_names=None):
-    from sklearn.metrics import ConfusionMatrixDisplay
     if model_names is None:
         model_names = list(agg_cm_stats.keys())
     n = len(model_names)
@@ -231,16 +291,11 @@ def plot_aggregate_confusion_mean_se(agg_cm_stats, directory_path, model_names=N
         std_cm = agg_cm_stats[mname]['std_cm']
         n_iter = agg_cm_stats[mname]['n_iterations']
 
-        disp = ConfusionMatrixDisplay(mean_cm, display_labels=[1, 2, 3])
-        disp.plot(ax=ax, cmap='Blues', values_format='.0%', colorbar=False, text_kw={'fontsize': 9})
-
         n_classes = mean_cm.shape[0]
-        for i in range(n_classes):
-            for j in range(n_classes):
-                if i < len(disp.text_) and j < len(disp.text_[i]):
-                    mean_val = mean_cm[i, j] * 100
-                    std_val = std_cm[i, j] * 100
-                    disp.text_[i][j].set_text(f'{mean_val:.1f}% ± {std_val:.1f}%')
+        text_labels = [[f'{mean_cm[i, j] * 100:.1f}% ± {std_cm[i, j] * 100:.1f}%'
+                        for j in range(n_classes)] for i in range(n_classes)]
+        _draw_vector_matrix(ax, mean_cm, labels=[1, 2, 3], cmap='Blues',
+                            vmin=0, vmax=1, text_labels=text_labels, text_size=9)
 
         summed_cm = mean_cm * n_iter
         acc, f1_macro, f1_per = _f1_from_cm(summed_cm)
@@ -252,6 +307,7 @@ def plot_aggregate_confusion_mean_se(agg_cm_stats, directory_path, model_names=N
     plt.tight_layout()
     fname = 'aggregate_confusion_mean_se.pdf'
     save_path = os.path.join(directory_path, fname)
+    _disable_rasterization(fig)
     fig.savefig(save_path, dpi=150, bbox_inches='tight')
     print(f'  Saved mean ± std confusion: {fname}')
     plt.close(fig)
@@ -411,8 +467,8 @@ def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_p
         ax_cm = axes[0, idx]
         cm = agg_confusion[mname]
         cm_norm = cm.astype('float') / cm.sum(axis=1, keepdims=True)
-        ConfusionMatrixDisplay(cm_norm, display_labels=[1, 2, 3]).plot(
-            ax=ax_cm, cmap='Blues', values_format='.0%', colorbar=False, text_kw={'fontsize': 9})
+        _draw_vector_matrix(ax_cm, cm_norm, labels=[1, 2, 3], cmap='Blues',
+                            vmin=0, vmax=1, text_format='.0%', text_size=9)
         acc, f1_macro, f1_per = _f1_from_cm(cm)
         subtitle = f'acc={acc:.3f}  F1={f1_macro:.3f}'
         for k, f1k in enumerate(f1_per):
@@ -434,6 +490,7 @@ def plot_aggregate_permutation(all_true, all_preds_by_model, directory_path, n_p
     plt.tight_layout()
     fname = 'aggregate_permutation.pdf'
     save_path = os.path.join(directory_path, fname)
+    _disable_rasterization(fig)
     fig.savefig(save_path, dpi=150, bbox_inches='tight')
     print(f'  Saved aggregate permutation test: {fname}')
     plt.close(fig)
@@ -499,6 +556,7 @@ def plot_permutation_per_archetype(all_true, all_preds_by_model, directory_path,
     plt.tight_layout()
     fname = 'permutation_per_archetype.pdf'
     save_path = os.path.join(directory_path, fname)
+    _disable_rasterization(fig)
     fig.savefig(save_path, dpi=150, bbox_inches='tight')
     print(f'  Saved per-archetype permutation test: {fname}')
     plt.close(fig)
@@ -618,6 +676,7 @@ def plot_shap_per_archetype(aggregated_shap, feature_cols, directory_path):
         plt.tight_layout()
         fname = f'shap_{mname}_per_archetype.pdf'
         save_path = os.path.join(directory_path, fname)
+        _disable_rasterization(fig)
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
         print(f'  Saved SHAP per archetype: {fname}')
         plt.close(fig)
@@ -629,6 +688,7 @@ def save_if_best(fig, directory_path, f1_scores, per_class_f1, iteration, thresh
         mean_f1 = np.max(f1_scores)
         fname = f'best_f1_{mean_f1:.3f}_f1-1_{avg_f1_per[0]:.3f}_f1-2_{avg_f1_per[1]:.3f}_f1-3_{avg_f1_per[2]:.3f}_iter{iteration}.pdf'
         save_path = os.path.join(directory_path, fname)
+        _disable_rasterization(fig)
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
         print(f'  Saved {fname}')
         return True
@@ -709,6 +769,7 @@ def plot_permutation_archetype_difference(all_archetype_probs, target_arch=3, n_
     fig.tight_layout()
 
     if save_path is not None:
+        _disable_rasterization(fig)
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
         print(f'  Saved permutation archetype difference plot: {save_path}')
 
@@ -766,12 +827,20 @@ def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,c
     #compute the scale factor for the confidence ellipse based on the chi-squared distribution
     scale = np.sqrt(chi2.ppf(confidence, 2))
     colors = ['pink', 'purple',  'cyan']
+    ellipse_geometry = []
 
     for i, (mean, cov) in enumerate(zip(means, covs)):
         color = colors[i % len(colors)]
+        geometry = {
+            'archetype': i + 1,
+            'width': np.nan,
+            'height': np.nan,
+            'angle': np.nan,
+        }
 
         if not np.all(np.isfinite(mean)) or not np.all(np.isfinite(cov)):
             print(f"  Skipping confidence ellipse for archetype {i + 1}: invalid mean/covariance")
+            ellipse_geometry.append(geometry)
             continue
         # compute eigenvalues and eigenvectors of the covariance matrix
         #eigenvalues = amount of spread along ellipse axes
@@ -785,6 +854,7 @@ def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,c
 
         if np.any(eigvals < -1e-10):
             print(f"  Skipping confidence ellipse for archetype {i + 1}: negative covariance eigenvalues {eigvals}")
+            ellipse_geometry.append(geometry)
             continue
         eigvals = np.clip(eigvals, 0, None)
 
@@ -794,6 +864,12 @@ def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,c
 
         width = 2 * scale * np.sqrt(eigvals[0])
         height = 2 * scale * np.sqrt(eigvals[1])
+        geometry.update({
+            'width': width,
+            'height': height,
+            'angle': angle,
+        })
+        ellipse_geometry.append(geometry)
 
         ellipse = Ellipse(mean,
                           width,
@@ -816,9 +892,364 @@ def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,c
     ax.set_title("Mean archetype triangle")
 
     plt.tight_layout()
+    _disable_rasterization(plt.gcf())
     plt.savefig(output_file, dpi=300)
     plt.close()
-    return mean_coords_df
+    ellipse_geometry_df = pd.DataFrame(ellipse_geometry)
+    return mean_coords_df, ellipse_geometry_df
+
+
+def plot_mean_hormone_archetype_pc1_pc2_by_sex(mean_hormones_arch, directory_path,
+                                               mean_coords_df=None, sex_col='sex'):
+    required_cols = {'PC1', 'PC2', sex_col}
+    missing_cols = sorted(required_cols - set(mean_hormones_arch.columns))
+    if missing_cols:
+        print(f'  Skipped mean hormone archetype PC plot; missing columns: {missing_cols}')
+        return
+
+    coords_path = os.path.join(directory_path, 'mean_archetype_coordinates.xlsx')
+    ellipse_geometry_df = pd.DataFrame()
+    if os.path.exists(coords_path):
+        try:
+            mean_coords_df = pd.read_excel(coords_path, sheet_name='mean_coordinates')
+            ellipse_geometry_df = pd.read_excel(coords_path, sheet_name='ellipse_geometry')
+        except ValueError:
+            mean_coords_df = pd.read_excel(coords_path)
+            print(f'  Loaded mean archetype coordinates without ellipse sheet: {coords_path}')
+        else:
+            print(f'  Loaded mean archetype coordinates and ellipses: {coords_path}')
+    elif mean_coords_df is None:
+        print(f'  Skipped mean hormone archetype PC plot; missing file: {coords_path}')
+        return
+
+    if mean_coords_df is None or not {'PC1', 'PC2'}.issubset(mean_coords_df.columns):
+        print('  Skipped mean hormone archetype PC plot; missing mean PC coordinates')
+        return
+
+    plot_df = mean_hormones_arch.dropna(subset=['PC1', 'PC2']).copy()
+    if plot_df.empty:
+        print('  Skipped mean hormone archetype PC plot; no finite hormone archetype PC coordinates')
+        return
+
+    mean_coords = mean_coords_df.copy()
+    if 'archetype' not in mean_coords.columns:
+        mean_coords.insert(0, 'archetype', np.arange(1, len(mean_coords) + 1))
+    mean_coords = mean_coords.dropna(subset=['PC1', 'PC2']).copy()
+    mean_coords = mean_coords.sort_values('archetype')
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    sex_values = plot_df[sex_col].astype(str).str.strip().str.lower()
+    female_mask = sex_values.isin(['f', 'female'])
+    male_mask = sex_values.isin(['m', 'male'])
+    unknown_mask = ~(female_mask | male_mask)
+
+    if female_mask.any():
+        ax.plot(plot_df.loc[female_mask, 'PC1'], plot_df.loc[female_mask, 'PC2'],
+                linestyle='None', marker='o', markersize=10, markerfacecolor='red',
+                markeredgecolor='white', markeredgewidth=0.6, label='Female')
+    if male_mask.any():
+        ax.plot(plot_df.loc[male_mask, 'PC1'], plot_df.loc[male_mask, 'PC2'],
+                linestyle='None', marker='o', markersize=10, markerfacecolor='royalblue',
+                markeredgecolor='white', markeredgewidth=0.6, label='Male')
+    if unknown_mask.any():
+        ax.plot(plot_df.loc[unknown_mask, 'PC1'], plot_df.loc[unknown_mask, 'PC2'],
+                linestyle='None', marker='o', markersize=5, markerfacecolor='gray',
+                markeredgecolor='white', markeredgewidth=0.6, label='Other/unknown')
+
+    arch_colors = ['tomato', 'seagreen', 'royalblue']
+    if len(mean_coords) >= 3:
+        triangle = mean_coords.iloc[:3]
+        closed = np.vstack([triangle[['PC1', 'PC2']].to_numpy(dtype=float),
+                            triangle[['PC1', 'PC2']].iloc[0].to_numpy(dtype=float)])
+        ax.plot(closed[:, 0], closed[:, 1], color='black', linewidth=2.5,
+                label='Mean archetype triangle')
+
+    for _, row in mean_coords.iterrows():
+        archetype = int(row['archetype']) if pd.notna(row['archetype']) else None
+        color = arch_colors[(archetype - 1) % len(arch_colors)] if archetype is not None else 'black'
+        # ax.scatter(row['PC1'], row['PC2'], marker='^', s=160,
+        #            facecolor='white', edgecolor=color, linewidth=2.5, zorder=5)
+        ax.text(row['PC1'], row['PC2'], str(archetype), fontsize=13, weight='bold',
+                color=color, ha='center', va='center', zorder=6)
+
+    if not ellipse_geometry_df.empty:
+        mean_lookup = mean_coords.set_index('archetype')
+        for _, ellipse_row in ellipse_geometry_df.iterrows():
+            archetype = ellipse_row.get('archetype')
+            if pd.isna(archetype) or archetype not in mean_lookup.index:
+                continue
+
+            try:
+                width, height, angle = np.asarray(
+                    [ellipse_row.get('width'), ellipse_row.get('height'), ellipse_row.get('angle')],
+                    dtype=float,
+                )
+            except (TypeError, ValueError):
+                continue
+
+            if not np.all(np.isfinite([width, height, angle])):
+                continue
+
+            mean = mean_lookup.loc[archetype]
+            color = arch_colors[(int(archetype) - 1) % len(arch_colors)]
+            ellipse = Ellipse((mean['PC1'], mean['PC2']), width, height, angle=angle,
+                              edgecolor=color, facecolor=to_rgba(color, 0.16), lw=2)
+            ax.add_patch(ellipse)
+
+    ax.set_xlabel('PC1')
+    ax.set_ylabel('PC2')
+    ax.set_title('Mean hormone archetype PC1/PC2 by sex')
+    ax.set_aspect('equal')
+    ax.margins(0.12)
+    ax.grid(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(True)
+    ax.spines['bottom'].set_visible(True)
+    ax.spines['left'].set_linewidth(1.0)
+    ax.spines['bottom'].set_linewidth(1.0)
+    ax.spines['left'].set_color('black')
+    ax.spines['bottom'].set_color('black')
+    ax.tick_params(axis='both', which='both', direction='out', length=4, width=1,
+                   color='black')
+    ax.legend(fontsize=8)
+
+    output_path = os.path.join(directory_path, 'mean_hormones_archetype_pc1_pc2_by_sex.pdf')
+    fig.tight_layout()
+    _disable_rasterization(fig)
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print(f'  Saved mean hormone archetype PC plot by sex: {output_path}')
+
+
+def plot_mean_hormone_feature_correlations_with_archetype_probs(mean_hormones_arch,
+                                                                metadata_cols,
+                                                                directory_path):
+    target_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
+    missing_cols = [col for col in target_cols if col not in mean_hormones_arch.columns]
+    if missing_cols:
+        print(f'  Skipped mean hormone feature correlations; missing columns: {missing_cols}')
+        return None
+
+    excluded_cols = set((metadata_cols or []) + [
+        'PC1', 'PC2', 'Dominant_archetype',
+        'Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob',
+    ])
+    feature_cols = [
+        col for col in mean_hormones_arch.columns
+        if col not in excluded_cols and pd.api.types.is_numeric_dtype(mean_hormones_arch[col])
+    ]
+    if not feature_cols:
+        print('  Skipped mean hormone feature correlations; no numeric feature columns found')
+        return None
+
+    rows = []
+    for target_col in target_cols:
+        archetype = target_col.replace('_prob', '')
+        for feature_col in feature_cols:
+            pair_df = mean_hormones_arch[[feature_col, target_col]].dropna()
+            if len(pair_df) < 3 or pair_df[feature_col].nunique() < 2 or pair_df[target_col].nunique() < 2:
+                r_value = np.nan
+                p_value = np.nan
+            else:
+                r_value, p_value = pearsonr(pair_df[feature_col], pair_df[target_col])
+
+            rows.append({
+                'Feature': feature_col,
+                'Archetype': archetype,
+                'Pearson_r': r_value,
+                'p_value': p_value,
+                'n': len(pair_df),
+            })
+
+    corr_df = pd.DataFrame(rows)
+    corr_df['p_adjusted_BH'] = np.nan
+    for archetype in corr_df['Archetype'].unique():
+        mask = corr_df['Archetype'] == archetype
+        valid_pvalues = mask & corr_df['p_value'].notna()
+        if valid_pvalues.any():
+            _, adjusted_pvalues, _, _ = multipletests(
+                corr_df.loc[valid_pvalues, 'p_value'],
+                method='fdr_bh',
+            )
+            corr_df.loc[valid_pvalues, 'p_adjusted_BH'] = adjusted_pvalues
+
+    output_excel = os.path.join(directory_path, 'mean_hormone_feature_archetype_probability_correlations.xlsx')
+    corr_df.to_excel(output_excel, index=False)
+
+    archetypes = [col.replace('_prob', '') for col in target_cols]
+    archetype_titles = {
+        'Archetype1': 'Archetype 1',
+        'Archetype2': 'Archetype 2',
+        'Archetype3': 'Archetype 3',
+    }
+    plot_df = corr_df[
+        corr_df['p_adjusted_BH'].notna()
+        & (corr_df['p_adjusted_BH'] < 0.1)
+        & corr_df['Pearson_r'].notna()
+    ].copy()
+    max_rows = max(1, *(len(plot_df[plot_df['Archetype'] == archetype]) for archetype in archetypes))
+    max_abs_corr = plot_df['Pearson_r'].abs().max() if not plot_df.empty else 0.5
+    x_limit = min(1.0, max(0.5, np.ceil((max_abs_corr + 0.05) * 10) / 10))
+
+    fig, axes = plt.subplots(
+        1, 3,
+        figsize=(9.2, max(3.0, 0.38 * max_rows + 1.2)),
+        sharex=True,
+    )
+    point_color = '#7f8fa0'
+    line_color = '#5f6871'
+    faint_alpha = 0.32
+
+    for ax, archetype in zip(axes, archetypes):
+        arch_df = plot_df[plot_df['Archetype'] == archetype].copy()
+        arch_df = arch_df.sort_values('Pearson_r', ascending=True).reset_index(drop=True)
+
+        if arch_df.empty:
+            ax.text(0.5, 0.5, 'No BH < 0.1\ncorrelations', ha='center', va='center',
+                    fontsize=8, transform=ax.transAxes)
+            ax.set_yticks([])
+        else:
+            y_positions = np.arange(len(arch_df))
+            for y_pos, row in zip(y_positions, arch_df.itertuples(index=False)):
+                alpha = faint_alpha if row.p_adjusted_BH > 0.05 else 1.0
+                ax.hlines(y_pos, 0, row.Pearson_r, color=line_color, linewidth=1.2, alpha=alpha)
+                ax.scatter(row.Pearson_r, y_pos, s=70, color=point_color, alpha=alpha,
+                           edgecolors='none', zorder=3)
+
+            ax.set_yticks(y_positions)
+            ax.set_yticklabels(arch_df['Feature'], fontsize=7)
+
+        ax.set_ylim(max_rows - 0.4, -0.6)
+        ax.axvline(0, color='black', linewidth=1.0)
+        ax.axhline(-0.5, color='#808080', linewidth=0.8)
+        ax.set_xlim(-x_limit, x_limit)
+        ax.set_xticks([-0.5, 0, 0.5])
+        ax.xaxis.tick_top()
+        ax.tick_params(axis='x', labelsize=7, length=0, pad=1, labeltop=True, labelbottom=False)
+        ax.tick_params(axis='y', length=0)
+        ax.set_title(archetype_titles.get(archetype, archetype), fontsize=9, fontweight='bold', pad=12)
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+    fig.text(0.5, 0.02, 'Pearson r with archetype probability; transparent markers indicate 0.05 < BH < 0.1',
+             ha='center', fontsize=8)
+    fig.tight_layout(rect=(0, 0.06, 1, 1), w_pad=2.2)
+
+    output_pdf = os.path.join(directory_path, 'mean_hormone_feature_archetype_probability_correlations.pdf')
+    _disable_rasterization(fig)
+    fig.savefig(output_pdf, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+
+    print(f'  Saved mean hormone feature archetype probability correlations: {output_excel}')
+    print(f'  Saved mean hormone feature archetype probability correlation plot: {output_pdf}')
+    return corr_df
+
+
+def plot_mean_behavior_feature_correlations_with_mean_pcs(behavior_df,
+                                                          mean_table_df,
+                                                          metadata_cols,
+                                                          directory_path):
+    target_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
+    missing_cols = [col for col in target_cols if col not in mean_table_df.columns]
+    if missing_cols:
+        print(f'  Skipped mean behavior feature archetype probability correlations; missing columns: {missing_cols}')
+        return None
+
+    correlation_df = pd.concat(
+        [behavior_df.reset_index(drop=True), mean_table_df[target_cols].reset_index(drop=True)],
+        axis=1,
+    )
+
+    excluded_cols = set((metadata_cols or []) + [
+        'PC1', 'PC2', 'Dominant_archetype',
+        'Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob',
+    ])
+    feature_cols = [
+        col for col in correlation_df.columns
+        if col not in excluded_cols and pd.api.types.is_numeric_dtype(correlation_df[col])
+    ]
+    if not feature_cols:
+        print('  Skipped mean behavior feature archetype probability correlations; no numeric feature columns found')
+        return None
+
+    rows = []
+    for arch_idx, target_col in enumerate(target_cols, start=1):
+        for feature_col in feature_cols:
+            pair_df = correlation_df[[feature_col, target_col]].dropna()
+            if len(pair_df) < 3 or pair_df[feature_col].nunique() < 2 or pair_df[target_col].nunique() < 2:
+                r_value = np.nan
+                p_value = np.nan
+            else:
+                r_value, p_value = pearsonr(pair_df[feature_col], pair_df[target_col])
+
+            rows.append({
+                'Feature': feature_col,
+                'Archetype': f'Archetype{arch_idx}',
+                'Pearson_r': r_value,
+                'p_value': p_value,
+                'n': len(pair_df),
+            })
+
+    corr_df = pd.DataFrame(rows)
+    corr_df['p_adjusted_BH'] = np.nan
+    for archetype in corr_df['Archetype'].unique():
+        mask = corr_df['Archetype'] == archetype
+        valid_pvalues = mask & corr_df['p_value'].notna()
+        if valid_pvalues.any():
+            _, adjusted_pvalues, _, _ = multipletests(
+                corr_df.loc[valid_pvalues, 'p_value'],
+                method='fdr_bh',
+            )
+            corr_df.loc[valid_pvalues, 'p_adjusted_BH'] = adjusted_pvalues
+
+    corr_df = corr_df.sort_values(['Archetype', 'p_adjusted_BH'], na_position='last')
+    significant_df = corr_df[corr_df['p_adjusted_BH'] < 0.05].copy()
+
+    output_excel = os.path.join(directory_path, 'mean_behavior_feature_archetype_probability_correlations.xlsx')
+    with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
+        corr_df.to_excel(writer, sheet_name='all_correlations', index=False)
+        significant_df.to_excel(writer, sheet_name='BH_p_lt_0_05', index=False)
+
+    archetypes = ['Archetype1', 'Archetype2', 'Archetype3']
+    max_rows = 1
+    if not significant_df.empty:
+        max_rows = max(max_rows, *(len(significant_df[significant_df['Archetype'] == arch])
+                                  for arch in archetypes))
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, max(4, 0.28 * max_rows)), sharex=True)
+    colors = ['tomato', 'seagreen', 'royalblue']
+
+    for ax, archetype, color in zip(axes, archetypes, colors):
+        arch_df = significant_df[significant_df['Archetype'] == archetype].copy()
+        arch_df = arch_df.sort_values('Pearson_r', ascending=True)
+
+        if arch_df.empty:
+            ax.text(0.5, 0.5, 'No BH-significant\ncorrelations', ha='center', va='center',
+                    transform=ax.transAxes)
+            ax.set_yticks([])
+        else:
+            ax.barh(arch_df['Feature'], arch_df['Pearson_r'], color=color, alpha=0.75)
+            ax.tick_params(axis='y', labelsize=10)
+
+        ax.axvline(0, color='black', linewidth=0.8)
+        ax.set_xlim(-1, 1)
+        ax.set_title(archetype)
+        ax.set_xlabel('Pearson r')
+        ax.grid(axis='x', alpha=0.3)
+
+    fig.suptitle('BH-significant behaviour correlations with mean archetype probabilities (p < 0.05)')
+    fig.tight_layout()
+
+    output_pdf = os.path.join(directory_path, 'mean_behavior_feature_archetype_probability_correlations_BH_p_lt_0_05.pdf')
+    _disable_rasterization(fig)
+    fig.savefig(output_pdf, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+
+    print(f'  Saved mean behavior feature archetype probability correlations: {output_excel}')
+    print(f'  Saved mean behavior feature archetype probability correlation plot: {output_pdf}')
+    return significant_df
 
 
 def plot_average_confusion_matrices(accepted_results, output_file, model_names=None, labels=None):
@@ -858,17 +1289,16 @@ def plot_average_confusion_matrices(accepted_results, output_file, model_names=N
         mean_cm = np.mean(normalized_cms, axis=0) #on the number of iterations axis, we compute the mean confusion matrix across all iterations
         std_cm = np.std(normalized_cms, axis=0)
 
-        disp = ConfusionMatrixDisplay(mean_cm, display_labels=labels)
-        disp.plot(ax=ax, cmap='Blues', values_format='.1%', colorbar=False, text_kw={'fontsize': 8})
-
-        for row in range(mean_cm.shape[0]):
-            for col in range(mean_cm.shape[1]):
-                disp.text_[row][col].set_text(
-                    f'{mean_cm[row, col] * 100:.1f}%\n±{std_cm[row, col] * 100:.1f}%')
+        text_labels = [[f'{mean_cm[row, col] * 100:.1f}%\n±{std_cm[row, col] * 100:.1f}%'
+                        for col in range(mean_cm.shape[1])]
+                       for row in range(mean_cm.shape[0])]
+        _draw_vector_matrix(ax, mean_cm, labels=labels, cmap='Blues',
+                            vmin=0, vmax=1, text_labels=text_labels, text_size=8)
 
         ax.set_title(f'{model_name} average confusion\n(n={len(normalized_cms)})', fontsize=10)
 
     fig.tight_layout()
+    _disable_rasterization(fig)
     fig.savefig(output_file, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f'  Saved average confusion matrices: {output_file}')
