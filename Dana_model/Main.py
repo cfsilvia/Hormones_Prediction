@@ -943,6 +943,7 @@ def run_mean_archetype_analysis(directory_path, mean_coords_df, behavior_df, met
         os.path.join(mean_output_dir, 'mean_hormones_loocv_confusion_matrix.pdf'),
         permutation_results=permutation_results,
     )
+    
     return mean_table_df, mean_hormones_arch, loocv_results, permutation_results
 
 
