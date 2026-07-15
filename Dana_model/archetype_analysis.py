@@ -334,7 +334,7 @@ def build_mean_archetype_assignment(mean_coords_df, behavior_df, metadata_cols, 
 
     if directory_path is not None:
         mean_table_df.to_excel(os.path.join(directory_path, 'mean_archetype_probabilities_per_day.xlsx'), index=False)
-        mean_hormones_arch.to_excel(os.path.join(directory_path, 'mean_hormones_with_archetypes.xlsx'), index=False)
+        mean_hormones_arch.to_excel(os.path.join(directory_path, 'mean_hormones_with_archetypes1.xlsx'), index=False)
 
     return mean_table_df, mean_hormones_arch
 

@@ -28,6 +28,7 @@ def main():
         #select alpha , beta and epsilon
         #data_hierarchy_glycko = data_hierarchy.copy() #take all status
         data_hierarchy = data_hierarchy.loc[data_hierarchy['Hierarchy'].isin(["alpha","beta","epsilon"])]
+        #data_hierarchy = data_hierarchy
         data_hierarchy_glycko = data_hierarchy.copy()
         #change names from dominant to submissive
         

@@ -24,11 +24,12 @@ import numpy as np
 from archetype_analysis import (compute_pca, predict_archetype_loocv, predict_archetype_loocv_with_shap,
     sample_and_fit_archetypes, compute_archetype_probabilities, build_mean_archetype_assignment)
 from alignment.label_alignment import accumulate_results, apply_mapping
-from plot_utils import (plot_loocv_confusion_matrices, calculate_loocv_permutation_pvalues, plot_mean_archetype_triangle, plot_average_confusion_matrices,
+from plot_utils import (plot_loocv_confusion_matrices, plot_loocv_fscore_roc_summary, calculate_loocv_permutation_pvalues, plot_mean_archetype_triangle, plot_average_confusion_matrices,
                         setup_figure, draw_triangle, plot_confusion_matrices,
                         plot_mean_hormone_archetype_pc1_pc2_by_sex,
                         plot_mean_hormone_feature_correlations_with_archetype_probs,
-                        plot_mean_behavior_feature_correlations_with_mean_pcs)
+                        plot_mean_behavior_feature_correlations_with_mean_pcs,
+                        plot_mean_hormone_feature_archetype_probability_scatters_by_sex)
 from sklearn.metrics import confusion_matrix, f1_score
 from scipy.optimize import linear_sum_assignment
 from statsmodels.stats.multitest import multipletests
@@ -619,6 +620,15 @@ def _mann_whitney_pvalues_by_feature(values, feature_names, female_mask, male_ma
     return pvalues
 
 
+def _bh_correct_feature_pvalues(feature_pvalues):
+    if not feature_pvalues:
+        return {}
+
+    feature_names = list(feature_pvalues.keys())
+    adjusted_pvalues = _bh_correction([feature_pvalues[feature_name] for feature_name in feature_names])
+    return dict(zip(feature_names, adjusted_pvalues))
+
+
 def _pvalue_to_asterisks(pvalue):
     if pd.isna(pvalue):
         return ''
@@ -724,60 +734,66 @@ def plot_mean_archetype_shap_volcano_by_sex(loocv_results, source_df, directory_
             class_shap = shap_all_classes[:, order, class_idx]
             feature_pvalues = _mann_whitney_pvalues_by_feature(
                 class_shap, ordered_features, female_mask, male_mask)
+            bh_feature_pvalues = _bh_correct_feature_pvalues(feature_pvalues)
             xlim = (-2, 2)
 
-            fig, axes = plt.subplots(
-                1, 2,
-                figsize=(12, max(4.5, min(8, 0.22 * n_features + 1))),
-                sharex=False,
-                sharey=True,
-                gridspec_kw={'wspace': 0.35},
-            )
-
-            for ax, mask, sex_name in zip(axes, [female_mask, male_mask], ['Female', 'Male']):
-                if not mask.any():
-                    ax.text(0.5, 0.5, f'No {sex_name.lower()} samples', transform=ax.transAxes,
-                            ha='center', va='center')
-                    ax.set_axis_off()
-                    continue
-
-                plt.sca(ax)
-                shap.summary_plot(
-                    class_shap[mask],
-                    features=ordered_feature_values.loc[mask, ordered_features],
-                    feature_names=ordered_features,
-                    plot_type='violin',
-                    max_display=n_features,
-                    sort=False,
-                    show=False,
-                    color_bar=sex_name == 'Male',
-                    color_bar_label='Feature value',
-                    plot_size=None,
+            plot_variants = [
+                ('', '', feature_pvalues),
+                (' with BH correction', '_BH', bh_feature_pvalues),
+            ]
+            for title_suffix, file_suffix, pvalues_for_stars in plot_variants:
+                fig, axes = plt.subplots(
+                    1, 2,
+                    figsize=(12, max(4.5, min(8, 0.22 * n_features + 1))),
+                    sharex=False,
+                    sharey=True,
+                    gridspec_kw={'wspace': 0.35},
                 )
-                ax.axvline(0, color='gray', linewidth=0.6, alpha=0.7)
-                ax.set_xlim(xlim)
-                ax.set_title(f'{sex_name} (n={int(mask.sum())})', fontsize=8)
-                ax.set_xlabel(ax.get_xlabel(), fontsize=7)
-                ax.set_ylabel(ax.get_ylabel(), fontsize=7)
-                ax.tick_params(axis='x', labelsize=6)
-                ax.tick_params(axis='y', labelsize=5)
 
-            for extra_ax in fig.axes[2:]:
-                extra_ax.tick_params(labelsize=6)
-                extra_ax.set_ylabel(extra_ax.get_ylabel(), fontsize=7)
+                for ax, mask, sex_name in zip(axes, [female_mask, male_mask], ['Female', 'Male']):
+                    if not mask.any():
+                        ax.text(0.5, 0.5, f'No {sex_name.lower()} samples', transform=ax.transAxes,
+                                ha='center', va='center')
+                        ax.set_axis_off()
+                        continue
 
-            fig.suptitle(f'{model_name} {class_name} SHAP volcano by sex', fontsize=9)
-            fig.subplots_adjust(left=0.28, right=0.94, bottom=0.12, top=0.90, wspace=0.35)
-            _annotate_sex_mann_whitney_stars(fig, axes, feature_pvalues)
+                    plt.sca(ax)
+                    shap.summary_plot(
+                        class_shap[mask],
+                        features=ordered_feature_values.loc[mask, ordered_features],
+                        feature_names=ordered_features,
+                        plot_type='violin',
+                        max_display=n_features,
+                        sort=False,
+                        show=False,
+                        color_bar=sex_name == 'Male',
+                        color_bar_label='Feature value',
+                        plot_size=None,
+                    )
+                    ax.axvline(0, color='gray', linewidth=0.6, alpha=0.7)
+                    ax.set_xlim(xlim)
+                    ax.set_title(f'{sex_name} (n={int(mask.sum())})', fontsize=8)
+                    ax.set_xlabel(ax.get_xlabel(), fontsize=7)
+                    ax.set_ylabel(ax.get_ylabel(), fontsize=7)
+                    ax.tick_params(axis='x', labelsize=6)
+                    ax.tick_params(axis='y', labelsize=5)
 
-            file_name = (
-                f'mean_archetype_shap_volcano_{_safe_file_stem(model_name)}_'
-                f'{_safe_file_stem(class_name)}.pdf'
-            )
-            _disable_rasterization(fig)
-            fig.savefig(os.path.join(output_dir, file_name), dpi=150, bbox_inches='tight')
-            plt.close(fig)
-            saved_count += 1
+                for extra_ax in fig.axes[2:]:
+                    extra_ax.tick_params(labelsize=6)
+                    extra_ax.set_ylabel(extra_ax.get_ylabel(), fontsize=7)
+
+                fig.suptitle(f'{model_name} {class_name} SHAP volcano by sex{title_suffix}', fontsize=9)
+                fig.subplots_adjust(left=0.28, right=0.94, bottom=0.12, top=0.90, wspace=0.35)
+                _annotate_sex_mann_whitney_stars(fig, axes, pvalues_for_stars)
+
+                file_name = (
+                    f'mean_archetype_shap_volcano_{_safe_file_stem(model_name)}_'
+                    f'{_safe_file_stem(class_name)}{file_suffix}.pdf'
+                )
+                _disable_rasterization(fig)
+                fig.savefig(os.path.join(output_dir, file_name), dpi=150, bbox_inches='tight')
+                plt.close(fig)
+                saved_count += 1
 
     if saved_count:
         print(f'  Saved {saved_count} mean archetype SHAP volcano by sex plots: {output_dir}')
@@ -871,7 +887,10 @@ def run_parallel_iterations(directory_path, all_pca_coords, no_pca_data, exclude
         save_classification_metrics(state['iteration_metrics'], state['all_true'],
                                     state['all_preds_by_model'], directory_path)
         _plot_permutation_mean_vs_real_fscore(directory_path, accepted_results, user_models)
-        mean_coords_df, ellipse_geometry_df = plot_mean_archetype_triangle(all_pca_coords, accepted_results, os.path.join(directory_path, "mean_archetype_triangle.pdf"))
+        mean_coords_df, ellipse_geometry_df = plot_mean_archetype_triangle(
+            all_pca_coords, accepted_results,
+            os.path.join(directory_path, "mean_archetype_triangle.pdf"),
+            behavior_df=behavior_df, metadata_cols=metadata_cols)
         with pd.ExcelWriter(os.path.join(directory_path, "mean_archetype_coordinates.xlsx")) as writer:
             mean_coords_df.to_excel(writer, sheet_name="mean_coordinates", index=False)
             ellipse_geometry_df.to_excel(writer, sheet_name="ellipse_geometry", index=False)
@@ -921,6 +940,8 @@ def run_mean_archetype_analysis(directory_path, mean_coords_df, behavior_df, met
         mean_hormones_arch, metadata_cols, mean_output_dir)
     plot_mean_behavior_feature_correlations_with_mean_pcs(
         behavior_df, mean_table_df, metadata_cols, mean_output_dir)
+    plot_mean_hormone_feature_archetype_probability_scatters_by_sex(
+        mean_hormones_arch, metadata_cols, mean_output_dir)
     
     loocv_results = predict_archetype_loocv_with_shap(
         mean_hormones_arch, metadata_cols, model_names=user_models)
@@ -943,7 +964,12 @@ def run_mean_archetype_analysis(directory_path, mean_coords_df, behavior_df, met
         os.path.join(mean_output_dir, 'mean_hormones_loocv_confusion_matrix.pdf'),
         permutation_results=permutation_results,
     )
-    
+    plot_loocv_fscore_roc_summary(
+        loocv_results,
+        mean_hormones_arch['Dominant_archetype'].values,
+        os.path.join(mean_output_dir, 'mean_hormones_loocv_fscore_roc_summary.pdf'),
+    )
+
     return mean_table_df, mean_hormones_arch, loocv_results, permutation_results
 
 

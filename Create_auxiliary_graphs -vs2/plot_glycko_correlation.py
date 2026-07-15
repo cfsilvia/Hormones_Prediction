@@ -83,7 +83,8 @@ class plot_glycko_correlation:
         
         ax.scatter(x, y, s=df['size'].values, c=df['color'].values, edgecolor='k', linewidths=0.5, alpha=0.7)
         
-        for (xi, yi, p, sz) in zip(x, y, df['pvalue'].values, df['size'].values):
+        for (xi, yi, p, sz) in zip(x, y, df['pvalue_adj'].values, df['size'].values):
+        
           stars = plot_glycko_correlation.p_to_stars(p)  
           if stars:
               #fs = max(12, min(14, 6 + 0.02 * np.sqrt(sz)))
@@ -153,7 +154,7 @@ class plot_glycko_correlation:
         
         
         plt.tight_layout()
-        plt.savefig("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/correl_glycko_vs_compound_2026.pdf", bbox_inches="tight")
+        plt.savefig("U:/Users/Silvia/RutiFrishman_2025_hormones_paper/correl_glycko_vs_compound_2026_alpha_beta_epsilon_BH.pdf", bbox_inches="tight")
         plt.close()
 
 

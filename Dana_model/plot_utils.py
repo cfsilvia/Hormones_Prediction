@@ -12,7 +12,7 @@ plt.rcParams.update({
 })
 from matplotlib.gridspec import GridSpec
 from matplotlib.cm import ScalarMappable
-from sklearn.metrics import f1_score, confusion_matrix
+from sklearn.metrics import auc, f1_score, confusion_matrix, roc_curve
 import os
 import pandas as pd
 from alignment.label_alignment import compute_aggregate_confusion
@@ -30,6 +30,28 @@ def _disable_rasterization(fig):
     for artist in fig.findobj():
         if hasattr(artist, 'set_rasterized'):
             artist.set_rasterized(False)
+
+
+def _find_metadata_col(behavior_df, metadata_cols, preferred_names):
+    if behavior_df is None:
+        return None
+    candidate_cols = [col for col in (metadata_cols or []) if col in behavior_df.columns]
+    candidate_cols.extend([col for col in behavior_df.columns if col not in candidate_cols])
+    lower_to_col = {str(col).strip().lower(): col for col in candidate_cols}
+    for name in preferred_names:
+        col = lower_to_col.get(name.lower())
+        if col is not None:
+            return col
+    return None
+
+
+def _lighten_color(color, amount=0.55):
+    r, g, b, _ = to_rgba(color)
+    return (
+        r + (1.0 - r) * amount,
+        g + (1.0 - g) * amount,
+        b + (1.0 - b) * amount,
+    )
 
 
 def _draw_vector_matrix(ax, values, labels=None, cmap='Blues', vmin=None, vmax=None,
@@ -206,6 +228,123 @@ def plot_loocv_confusion_matrices(loocv_results, y_true, save_path, labels=None,
     fig.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f'  Saved LOOCV confusion matrix: {save_path}')
+
+
+def plot_loocv_fscore_roc_summary(loocv_results, y_true, save_path, labels=None, title=None):
+    if labels is None:
+        labels = list(np.unique(y_true))
+    if title is None:
+        title = ' '
+
+    y_true = np.asarray(y_true)
+    n_classes = len(labels)
+    n_models = len(loocv_results)
+    colors = ['#f8766d', '#4daf4a', '#5b83b1'][:n_classes]
+    chance_fscore = 100.0 / n_classes if n_classes else 0.0
+
+    fig, axes = plt.subplots(n_models, 3, figsize=(11, 3.4 * n_models), squeeze=False)
+
+    for row_idx, (model_name, result) in enumerate(loocv_results.items()):
+        y_pred = np.asarray(result['predictions'])
+
+        cm_ax = axes[row_idx, 0]
+        cm = confusion_matrix(y_true, y_pred, labels=labels)
+        row_sums = cm.sum(axis=1, keepdims=True)
+        cm_percent = np.divide(cm, row_sums, out=np.zeros_like(cm, dtype=float), where=row_sums != 0)
+        class_labels = [f'Arch {label}' for label in labels]
+
+        _draw_vector_matrix(cm_ax, cm_percent, labels=class_labels, cmap='Greys',
+                            vmin=0, vmax=1, text_format='.1%', text_size=8)
+        cm_ax.set_xlabel('Predicted labels')
+        cm_ax.set_ylabel('True labels')
+        cm_ax.set_title(f'{model_name}\nConfusion matrix', fontsize=10)
+
+        fscore_ax = axes[row_idx, 1]
+        f1_per_class = f1_score(y_true, y_pred, labels=labels, average=None, zero_division=0) * 100.0
+        fscore_ax.bar(np.arange(n_classes), f1_per_class, color=colors, edgecolor='none')
+        fscore_ax.axhline(chance_fscore, color='black', linestyle=':', linewidth=1)
+        fscore_ax.set_ylim(0, 100)
+        fscore_ax.set_xticks(np.arange(n_classes))
+        fscore_ax.set_xticklabels([f'Arch {label}' for label in labels])
+        fscore_ax.set_xlabel('Class')
+        fscore_ax.set_ylabel('Prediction performance (F-score)')
+        fscore_ax.set_title('Per-class F-score', fontsize=10)
+        fscore_ax.spines['top'].set_visible(False)
+        fscore_ax.spines['right'].set_visible(False)
+        fscore_ax.grid(axis='y', alpha=0.2)
+
+        roc_ax = axes[row_idx, 2]
+        class_scores = result.get('class_scores')
+        if class_scores is None:
+            roc_ax.text(0.5, 0.5, 'ROC unavailable\nmissing class_scores',
+                        ha='center', va='center', transform=roc_ax.transAxes)
+        else:
+                class_scores = np.asarray(class_scores, dtype=float)
+                mean_fpr = np.linspace(0, 1, 100)
+                tprs = []
+                auc_values = []
+
+                for class_idx, label in enumerate(labels):
+                    if class_idx >= class_scores.shape[1]:
+                        continue
+
+                    binary_true = (y_true == label).astype(int)
+
+                    if len(np.unique(binary_true)) < 2:
+                        continue
+
+                    fpr, tpr, _ = roc_curve(binary_true, class_scores[:, class_idx])
+                    roc_auc = auc(fpr, tpr)
+
+                    interp_tpr = np.interp(mean_fpr, fpr, tpr)
+                    interp_tpr[0] = 0.0
+
+                    tprs.append(interp_tpr)
+                    auc_values.append(roc_auc)
+
+                if tprs:
+                    mean_tpr = np.mean(tprs, axis=0)
+                    mean_tpr[-1] = 1.0
+                    macro_auc = auc(mean_fpr, mean_tpr)
+
+                    roc_ax.plot(
+                        mean_fpr,
+                        mean_tpr,
+                        color='black',
+                        linewidth=1.8,
+                        label=f''
+                    )
+
+                    roc_ax.set_title(f'Average ROC curves (AUC={macro_auc:.2f})', fontsize=10)
+                    roc_ax.legend(fontsize=8, frameon=False, loc='lower right')
+                else:
+                    roc_ax.text(
+                        0.5, 0.5,
+                        'ROC unavailable',
+                        ha='center',
+                        va='center',
+                        transform=roc_ax.transAxes
+                    )
+                roc_ax.plot([0, 1], [0, 1], color='gray', linestyle='--', linewidth=1)
+                roc_ax.set_xlim(0, 1)
+                roc_ax.set_ylim(0, 1)
+                roc_ax.set_xlabel('False positive rate')
+                roc_ax.set_ylabel('True positive rate')
+                roc_ax.set_aspect('equal', adjustable='box')
+                roc_ax.spines['top'].set_visible(False)
+                roc_ax.spines['right'].set_visible(False)
+
+        if row_idx == 0:
+            for panel_label, ax in zip(['A', 'B', 'C'], axes[row_idx]):
+                ax.text(-0.18, 1.15, panel_label, transform=ax.transAxes,
+                        fontsize=14, fontweight='bold', va='top')
+
+    fig.suptitle(title)
+    fig.tight_layout()
+    _disable_rasterization(fig)
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f'  Saved LOOCV F-score/ROC summary: {save_path}')
 
 
 def calculate_loocv_permutation_pvalues(hormones_arch, metadata_cols, loocv_results, y_true,
@@ -780,7 +919,9 @@ def plot_permutation_archetype_difference(all_archetype_probs, target_arch=3, n_
 
     accepted_results contains mapped archetypes.
     """
-def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,confidence=0.95):
+def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,
+                                 confidence=0.95, sex_values=None,
+                                 behavior_df=None, metadata_cols=None):
     n_vertices = accepted_results[0]['archetypes'].shape[0]
     vertex_positions = [[] for _ in range(n_vertices)]
     # collect aligned archetypes
@@ -816,7 +957,44 @@ def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,c
 
     fig, ax = plt.subplots(figsize=(8,8))
 
-    ax.scatter(all_pca_coords[:,0],all_pca_coords[:,1], s=8, alpha=.8, color="blue")
+    hierarchy_values = None
+    if behavior_df is not None and len(behavior_df) == len(all_pca_coords):
+        sex_col = _find_metadata_col(behavior_df, metadata_cols, ['sex'])
+        hierarchy_col = _find_metadata_col(behavior_df, metadata_cols, ['Hierarchy'])
+        if sex_col is not None:
+            sex_values = behavior_df[sex_col]
+        if hierarchy_col is not None:
+            hierarchy_values = behavior_df[hierarchy_col]
+    elif behavior_df is not None:
+        print('  Mean archetype triangle: skipped behavior metadata coloring; row count does not match PCA coordinates')
+
+    if sex_values is not None and len(sex_values) == len(all_pca_coords):
+        sex_labels = pd.Series(sex_values).astype(str).str.strip().str.lower()
+        female_mask = sex_labels.isin(['f', 'female', 'females']).to_numpy()
+        male_mask = sex_labels.isin(['m', 'male', 'males']).to_numpy()
+        unknown_mask = ~(female_mask | male_mask)
+        alpha_mask = np.zeros(len(all_pca_coords), dtype=bool)
+        if hierarchy_values is not None and len(hierarchy_values) == len(all_pca_coords):
+            alpha_mask = _dominant_hierarchy_mask(pd.Series(hierarchy_values)).to_numpy()
+
+        for label, sex_mask, color in [
+            ('Male', male_mask, '#2ca02c'),
+            ('Female', female_mask, '#6f35c2'),
+        ]:
+            submissive_color = _lighten_color(color, 0.55)
+            non_alpha_mask = sex_mask & ~alpha_mask
+            sex_alpha_mask = sex_mask & alpha_mask
+            if non_alpha_mask.any():
+                ax.scatter(all_pca_coords[non_alpha_mask, 0], all_pca_coords[non_alpha_mask, 1],
+                           s=8, color=submissive_color, label=f'{label} submissive')
+            if sex_alpha_mask.any():
+                ax.scatter(all_pca_coords[sex_alpha_mask, 0], all_pca_coords[sex_alpha_mask, 1],
+                           s=8, color=color, label=f'{label} alpha')
+        if unknown_mask.any():
+            ax.scatter(all_pca_coords[unknown_mask, 0], all_pca_coords[unknown_mask, 1],
+                       s=8, color=_lighten_color('gray', 0.55), label='Other/unknown')
+    else:
+        ax.scatter(all_pca_coords[:,0],all_pca_coords[:,1], s=8, alpha=.8, color="blue")
     means = np.asarray(means)
     mean_coords_df = pd.DataFrame(means, columns=[f'PC{i + 1}' for i in range(means.shape[1])])
     mean_coords_df.insert(0, 'archetype', np.arange(1, len(means) + 1)) #add archetype column to the dataframe for clarity
@@ -826,7 +1004,7 @@ def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,c
     ax.plot(closed[:,0], closed[:,1], color='black', linestyle='-', lw=3)
     #compute the scale factor for the confidence ellipse based on the chi-squared distribution
     scale = np.sqrt(chi2.ppf(confidence, 2))
-    colors = ['pink', 'purple',  'cyan']
+    colors = ['#f8766d', '#4daf4a', '#5b83b1']
     ellipse_geometry = []
 
     for i, (mean, cov) in enumerate(zip(means, covs)):
@@ -876,7 +1054,7 @@ def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,c
                           height,
                           angle=angle,
                           edgecolor=color,
-                          facecolor=to_rgba(color, 0.18),
+                          facecolor=_lighten_color(color, 0.82),
                           lw=2)
 
         ax.add_patch(ellipse)
@@ -890,6 +1068,7 @@ def plot_mean_archetype_triangle(all_pca_coords, accepted_results, output_file,c
 
     ax.set_aspect("equal")
     ax.set_title("Mean archetype triangle")
+    ax.legend(fontsize=8, frameon=False)
 
     plt.tight_layout()
     _disable_rasterization(plt.gcf())
@@ -956,7 +1135,7 @@ def plot_mean_hormone_archetype_pc1_pc2_by_sex(mean_hormones_arch, directory_pat
                 linestyle='None', marker='o', markersize=5, markerfacecolor='gray',
                 markeredgecolor='white', markeredgewidth=0.6, label='Other/unknown')
 
-    arch_colors = ['tomato', 'seagreen', 'royalblue']
+    arch_colors = ['#f8766d', '#4daf4a', '#5b83b1']
     if len(mean_coords) >= 3:
         triangle = mean_coords.iloc[:3]
         closed = np.vstack([triangle[['PC1', 'PC2']].to_numpy(dtype=float),
@@ -1022,6 +1201,79 @@ def plot_mean_hormone_archetype_pc1_pc2_by_sex(mean_hormones_arch, directory_pat
     print(f'  Saved mean hormone archetype PC plot by sex: {output_path}')
 
 
+def _plot_correlations(corr_df, archetypes, archetype_titles, p_col, output_pdf,
+                       empty_label, footer_label):
+    point_color = '#7f8fa0'
+    line_color = '#5f6871'
+    faint_alpha = 0.32
+
+    plot_df = corr_df[
+        corr_df[p_col].notna()
+        & (corr_df[p_col] < 0.1)
+        & corr_df['Pearson_r'].notna()
+    ].copy()
+    row_counts = {
+        archetype: max(1, len(plot_df[plot_df['Archetype'] == archetype]))
+        for archetype in archetypes
+    }
+    max_abs_corr = plot_df['Pearson_r'].abs().max() if not plot_df.empty else 0.5
+    x_limit = min(1.0, max(0.5, np.ceil((max_abs_corr + 0.05) * 10) / 10))
+
+    row_gap_inches = 0.36
+    axis_heights = {
+        archetype: max(1.0, row_gap_inches * (row_count + 0.2))
+        for archetype, row_count in row_counts.items()
+    }
+    fig_height = max(3.0, max(axis_heights.values()) + 1.2)
+    fig, axes = plt.subplots(1, 3, figsize=(9.2, fig_height), sharex=True)
+    fig.subplots_adjust(left=0.08, right=0.98, bottom=0.42 / fig_height,
+                        top=1 - 0.72 / fig_height, wspace=0.75)
+    axis_top = 1 - 0.72 / fig_height
+    for ax, archetype in zip(axes, archetypes):
+        position = ax.get_position()
+        height = axis_heights[archetype] / fig_height
+        ax.set_position([position.x0, axis_top - height, position.width, height])
+
+    for ax, archetype in zip(axes, archetypes):
+        arch_df = plot_df[plot_df['Archetype'] == archetype].copy()
+        arch_df = arch_df.sort_values('Pearson_r', ascending=True).reset_index(drop=True)
+
+        if arch_df.empty:
+            ax.text(0.5, 0.5, empty_label, ha='center', va='center',
+                    fontsize=8, transform=ax.transAxes)
+            ax.set_yticks([])
+            ax.set_ylim(0.5, -0.6)
+        else:
+            y_positions = np.arange(len(arch_df))
+            for y_pos, row in zip(y_positions, arch_df.itertuples(index=False)):
+                alpha = faint_alpha if getattr(row, p_col) > 0.05 else 1.0
+                ax.hlines(y_pos, 0, row.Pearson_r, color=line_color, linewidth=1.2, alpha=alpha)
+                ax.scatter(row.Pearson_r, y_pos, s=70, color=point_color, alpha=alpha,
+                           edgecolors='none', zorder=3)
+
+            ax.set_yticks(y_positions)
+            ax.set_yticklabels(arch_df['Feature'], fontsize=7)
+            ax.set_ylim(len(arch_df) - 0.4, -0.6) #The reversed limits place the first row at the top rather than at the bottom.
+
+        ax.axvline(0, color='black', linewidth=1.0)
+        #This draws a horizontal line above the first feature row, acting visually as a divider beneath the title and top-axis labels.
+        ax.axhline(-0.5, color='#808080', linewidth=0.8)
+        ax.set_xlim(-x_limit, x_limit)
+        ax.set_xticks([-0.5, 0, 0.5])
+        ax.xaxis.tick_top()
+        ax.tick_params(axis='x', labelsize=7, length=0, pad=1, labeltop=True, labelbottom=False)
+        ax.tick_params(axis='y', length=0)
+        ax.set_title(archetype_titles.get(archetype, archetype), fontsize=9, fontweight='bold', pad=12)
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+    fig.text(0.5, 0.02, footer_label, ha='center', fontsize=8)
+    _disable_rasterization(fig)
+    fig.savefig(output_pdf, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+
+
 def plot_mean_hormone_feature_correlations_with_archetype_probs(mean_hormones_arch,
                                                                 metadata_cols,
                                                                 directory_path):
@@ -1067,7 +1319,7 @@ def plot_mean_hormone_feature_correlations_with_archetype_probs(mean_hormones_ar
     for archetype in corr_df['Archetype'].unique():
         mask = corr_df['Archetype'] == archetype
         valid_pvalues = mask & corr_df['p_value'].notna()
-        if valid_pvalues.any():
+        if valid_pvalues.any():#any check if there is at list one valid p-value in the boolean
             _, adjusted_pvalues, _, _ = multipletests(
                 corr_df.loc[valid_pvalues, 'p_value'],
                 method='fdr_bh',
@@ -1083,67 +1335,32 @@ def plot_mean_hormone_feature_correlations_with_archetype_probs(mean_hormones_ar
         'Archetype2': 'Archetype 2',
         'Archetype3': 'Archetype 3',
     }
-    plot_df = corr_df[
-        corr_df['p_adjusted_BH'].notna()
-        & (corr_df['p_adjusted_BH'] < 0.1)
-        & corr_df['Pearson_r'].notna()
-    ].copy()
-    max_rows = max(1, *(len(plot_df[plot_df['Archetype'] == archetype]) for archetype in archetypes))
-    max_abs_corr = plot_df['Pearson_r'].abs().max() if not plot_df.empty else 0.5
-    x_limit = min(1.0, max(0.5, np.ceil((max_abs_corr + 0.05) * 10) / 10))
-
-    fig, axes = plt.subplots(
-        1, 3,
-        figsize=(9.2, max(3.0, 0.38 * max_rows + 1.2)),
-        sharex=True,
-    )
-    point_color = '#7f8fa0'
-    line_color = '#5f6871'
-    faint_alpha = 0.32
-
-    for ax, archetype in zip(axes, archetypes):
-        arch_df = plot_df[plot_df['Archetype'] == archetype].copy()
-        arch_df = arch_df.sort_values('Pearson_r', ascending=True).reset_index(drop=True)
-
-        if arch_df.empty:
-            ax.text(0.5, 0.5, 'No BH < 0.1\ncorrelations', ha='center', va='center',
-                    fontsize=8, transform=ax.transAxes)
-            ax.set_yticks([])
-        else:
-            y_positions = np.arange(len(arch_df))
-            for y_pos, row in zip(y_positions, arch_df.itertuples(index=False)):
-                alpha = faint_alpha if row.p_adjusted_BH > 0.05 else 1.0
-                ax.hlines(y_pos, 0, row.Pearson_r, color=line_color, linewidth=1.2, alpha=alpha)
-                ax.scatter(row.Pearson_r, y_pos, s=70, color=point_color, alpha=alpha,
-                           edgecolors='none', zorder=3)
-
-            ax.set_yticks(y_positions)
-            ax.set_yticklabels(arch_df['Feature'], fontsize=7)
-
-        ax.set_ylim(max_rows - 0.4, -0.6)
-        ax.axvline(0, color='black', linewidth=1.0)
-        ax.axhline(-0.5, color='#808080', linewidth=0.8)
-        ax.set_xlim(-x_limit, x_limit)
-        ax.set_xticks([-0.5, 0, 0.5])
-        ax.xaxis.tick_top()
-        ax.tick_params(axis='x', labelsize=7, length=0, pad=1, labeltop=True, labelbottom=False)
-        ax.tick_params(axis='y', length=0)
-        ax.set_title(archetype_titles.get(archetype, archetype), fontsize=9, fontweight='bold', pad=12)
-        ax.grid(False)
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-
-    fig.text(0.5, 0.02, 'Pearson r with archetype probability; transparent markers indicate 0.05 < BH < 0.1',
-             ha='center', fontsize=8)
-    fig.tight_layout(rect=(0, 0.06, 1, 1), w_pad=2.2)
 
     output_pdf = os.path.join(directory_path, 'mean_hormone_feature_archetype_probability_correlations.pdf')
-    _disable_rasterization(fig)
-    fig.savefig(output_pdf, dpi=300, bbox_inches='tight')
-    plt.close(fig)
+    _plot_correlations(
+        corr_df,
+        archetypes,
+        archetype_titles,
+        'p_value',
+        output_pdf,
+        'No p < 0.1\ncorrelations',
+        'Pearson r with archetype probability; transparent markers indicate 0.05 < p < 0.1',
+    )
+
+    output_pdf_bh = os.path.join(directory_path, 'mean_hormone_feature_archetype_probability_correlations_BH.pdf')
+    _plot_correlations(
+        corr_df,
+        archetypes,
+        archetype_titles,
+        'p_adjusted_BH',
+        output_pdf_bh,
+        'No BH < 0.1\ncorrelations',
+        'Pearson r with archetype probability; transparent markers indicate 0.05 < BH < 0.1',
+    )
 
     print(f'  Saved mean hormone feature archetype probability correlations: {output_excel}')
     print(f'  Saved mean hormone feature archetype probability correlation plot: {output_pdf}')
+    print(f'  Saved mean hormone feature archetype probability correlation plot with BH: {output_pdf_bh}')
     return corr_df
 
 
@@ -1242,7 +1459,7 @@ def plot_mean_behavior_feature_correlations_with_mean_pcs(behavior_df,
     fig.suptitle('BH-significant behaviour correlations with mean archetype probabilities (p < 0.05)')
     fig.tight_layout()
 
-    output_pdf = os.path.join(directory_path, 'mean_behavior_feature_archetype_probability_correlations_BH_p_lt_0_05.pdf')
+    output_pdf = os.path.join(directory_path, 'mean_behavior_feature_archetype_probability_correlations_BH_p_lt_0_051.pdf')
     _disable_rasterization(fig)
     fig.savefig(output_pdf, dpi=300, bbox_inches='tight')
     plt.close(fig)
@@ -1250,6 +1467,213 @@ def plot_mean_behavior_feature_correlations_with_mean_pcs(behavior_df,
     print(f'  Saved mean behavior feature archetype probability correlations: {output_excel}')
     print(f'  Saved mean behavior feature archetype probability correlation plot: {output_pdf}')
     return significant_df
+
+
+def _format_pvalue(p_value):
+    if pd.isna(p_value):
+        return 'nan'
+    if p_value < 0.001:
+        return '< 0.001'
+    return f'{p_value:.3f}'
+
+
+def _dominant_hierarchy_mask(hierarchy_values):
+    hierarchy_strings = hierarchy_values.astype(str).str.strip().str.lower()
+    hierarchy_numeric = pd.to_numeric(hierarchy_values, errors='coerce')
+    return (
+        hierarchy_strings.str.contains('dominant', na=False)
+        | hierarchy_strings.isin(['dom', 'd', 'alpha', '1', '1.0', 'true'])
+        | (hierarchy_numeric == 1)
+    )
+
+
+def _plot_archetype_probability_feature_scatter(ax, plot_df, target_col, feature_col,
+                                                color, hierarchy_col):
+    dominant_mask = _dominant_hierarchy_mask(plot_df[hierarchy_col])
+    submissive_mask = ~dominant_mask
+
+    if submissive_mask.any():
+        ax.scatter(
+            plot_df.loc[submissive_mask, target_col],
+            plot_df.loc[submissive_mask, feature_col],
+            s=26, facecolors='none', edgecolors=_lighten_color(color, 0.55), linewidths=0.9,
+            label='Submissive', zorder=2,
+        )
+    if dominant_mask.any():
+        ax.scatter(
+            plot_df.loc[dominant_mask, target_col],
+            plot_df.loc[dominant_mask, feature_col],
+            s=30, facecolors=color, edgecolors='black', linewidths=0.4,
+            alpha=0.95, label='Dominant', zorder=3,
+        )
+
+    if len(plot_df) >= 2 and plot_df[target_col].nunique() >= 2:
+        slope, intercept = np.polyfit(plot_df[target_col], plot_df[feature_col], 1)
+        x_line = np.linspace(plot_df[target_col].min(), plot_df[target_col].max(), 100)
+        ax.plot(x_line, slope * x_line + intercept, color='black', linewidth=1.0, zorder=1)
+
+    ax.set_xlim(-0.03, 1.03)
+    ax.set_xlabel('Archetype probability', fontsize=7)
+    ax.set_ylabel(feature_col, fontsize=7)
+    ax.tick_params(axis='both', labelsize=6, length=2)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+
+def plot_mean_hormone_feature_archetype_probability_scatters_by_sex(mean_hormones_arch,
+                                                                    metadata_cols,
+                                                                    directory_path,
+                                                                    sex_col='sex',
+                                                                    hierarchy_col='Hierarchy',
+                                                                    pvalue_threshold=0.1):
+    target_cols = ['Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob']
+    required_cols = target_cols + [sex_col, hierarchy_col]
+    missing_cols = [col for col in required_cols if col not in mean_hormones_arch.columns]
+    if missing_cols:
+        print(f'  Skipped mean hormone archetype probability scatter correlations; missing columns: {missing_cols}')
+        return None
+
+    excluded_cols = set((metadata_cols or []) + [
+        'PC1', 'PC2', 'Dominant_archetype',
+        'Archetype1_prob', 'Archetype2_prob', 'Archetype3_prob',
+    ])
+    feature_cols = [
+        col for col in mean_hormones_arch.columns
+        if col not in excluded_cols and pd.api.types.is_numeric_dtype(mean_hormones_arch[col])
+    ]
+    if not feature_cols:
+        print('  Skipped mean hormone archetype probability scatter correlations; no numeric feature columns found')
+        return None
+
+    sex_values = mean_hormones_arch[sex_col].astype(str).str.strip().str.lower()
+    sex_masks = {
+        'Female': sex_values.isin(['f', 'female', 'females']),
+        'Male': sex_values.isin(['m', 'male', 'males']),
+    }
+
+    rows = []
+    for sex_name, sex_mask in sex_masks.items():
+        sex_df = mean_hormones_arch.loc[sex_mask].copy()
+        for arch_idx, target_col in enumerate(target_cols, start=1):
+            for feature_col in feature_cols:
+                pair_df = sex_df[[feature_col, target_col, hierarchy_col]].dropna()
+                if len(pair_df) < 3 or pair_df[feature_col].nunique() < 2 or pair_df[target_col].nunique() < 2:
+                    r_value = np.nan
+                    p_value = np.nan
+                else:
+                    r_value, p_value = pearsonr(pair_df[target_col], pair_df[feature_col])
+
+                rows.append({
+                    'Sex': sex_name,
+                    'Archetype': f'Archetype{arch_idx}',
+                    'Archetype_probability_col': target_col,
+                    'Feature': feature_col,
+                    'Pearson_r': r_value,
+                    'p_value': p_value,
+                    'n': len(pair_df),
+                })
+
+    corr_df = pd.DataFrame(rows)
+    corr_df['p_adjusted_BH'] = np.nan
+    for (sex_name, archetype), group_df in corr_df.groupby(['Sex', 'Archetype']):
+        valid_pvalues = group_df['p_value'].notna()
+        if valid_pvalues.any():
+            _, adjusted_pvalues, _, _ = multipletests(
+                group_df.loc[valid_pvalues, 'p_value'], method='fdr_bh')
+            corr_df.loc[group_df.loc[valid_pvalues].index, 'p_adjusted_BH'] = adjusted_pvalues
+
+    corr_df = corr_df.sort_values(['Sex', 'Archetype', 'p_value'], na_position='last')
+    significant_df = corr_df[corr_df['p_value'] < pvalue_threshold].copy()
+
+    output_excel = os.path.join(directory_path, 'mean_hormone_feature_archetype_probability_scatter_correlations_by_sex.xlsx')
+    with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
+        corr_df.to_excel(writer, sheet_name='all_correlations', index=False)
+        significant_df.to_excel(writer, sheet_name=f'p_lt_{str(pvalue_threshold).replace(".", "_")}', index=False)
+
+    sex_colors = {'Male': '#0b7a75', 'Female': '#6f35c2'}
+    ordered_sexes = ['Male', 'Female']
+    feature_position = {feature: idx for idx, feature in enumerate(feature_cols)}
+
+    output_pdfs = []
+    for arch_idx, target_col in enumerate(target_cols, start=1):
+        archetype = f'Archetype{arch_idx}'
+        arch_corr = corr_df[corr_df['Archetype'] == archetype].copy()
+        feature_order_df = arch_corr.groupby('Feature', as_index=False).agg(
+            min_p=('p_value', 'min'),
+            max_abs_r=('Pearson_r', lambda values: values.abs().max()),
+        )
+        feature_order_df['feature_position'] = feature_order_df['Feature'].map(feature_position)
+        feature_order_df = feature_order_df.sort_values(
+            ['min_p', 'max_abs_r', 'feature_position'],
+            ascending=[True, False, True],
+            na_position='last',
+        )
+        ordered_features = feature_order_df['Feature'].tolist()
+
+        n_cols = min(4, len(ordered_features))
+        n_feature_groups = int(np.ceil(len(ordered_features) / n_cols))
+        n_rows = 2 * n_feature_groups
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.0 * n_cols, 2.6 * n_rows), squeeze=False)
+
+        for feature_idx, feature_col in enumerate(ordered_features):
+            feature_group = feature_idx // n_cols
+            col_idx = feature_idx % n_cols
+            for sex_offset, sex_name in enumerate(ordered_sexes):
+                ax = axes[(2 * feature_group) + sex_offset, col_idx]
+                sex_mask = sex_masks[sex_name]
+                plot_df = mean_hormones_arch.loc[
+                    sex_mask, [target_col, feature_col, hierarchy_col]
+                ].dropna()
+                _plot_archetype_probability_feature_scatter(
+                    ax, plot_df, target_col, feature_col,
+                    sex_colors.get(sex_name, '#555555'), hierarchy_col)
+
+                stat_row = arch_corr[
+                    (arch_corr['Sex'] == sex_name) & (arch_corr['Feature'] == feature_col)
+                ]
+                if stat_row.empty:
+                    r_value = np.nan
+                    p_value = np.nan
+                else:
+                    r_value = stat_row.iloc[0]['Pearson_r']
+                    p_value = stat_row.iloc[0]['p_value']
+
+                if sex_offset == 0:
+                    ax.set_title(feature_col, fontsize=8, fontweight='bold')
+                ax.text(
+                    0.04, 0.96,
+                    f'{sex_name}\nr = {r_value:.2f}\np = {_format_pvalue(p_value)}',
+                    transform=ax.transAxes, ha='left', va='top', fontsize=6,
+                )
+                if plot_df.empty:
+                    ax.text(0.5, 0.5, 'No data', transform=ax.transAxes,
+                            ha='center', va='center', fontsize=7)
+
+        for feature_idx in range(len(ordered_features), n_feature_groups * n_cols):
+            feature_group = feature_idx // n_cols
+            col_idx = feature_idx % n_cols
+            axes[2 * feature_group, col_idx].axis('off')
+            axes[(2 * feature_group) + 1, col_idx].axis('off')
+
+        fig.suptitle(
+            f'{archetype}: mean hormone features vs archetype probability',
+            fontsize=10, y=0.995,
+        )
+        fig.tight_layout(rect=[0, 0, 1, 0.98])
+        output_pdf = os.path.join(
+            directory_path,
+            f'mean_hormone_feature_archetype_probability_scatters_by_sex_{archetype}.pdf',
+        )
+        _disable_rasterization(fig)
+        fig.savefig(output_pdf, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        output_pdfs.append(output_pdf)
+
+    print(f'  Saved mean hormone archetype probability scatter correlations by sex: {output_excel}')
+    print('  Saved mean hormone archetype probability scatter plots by sex:')
+    for output_pdf in output_pdfs:
+        print(f'    {output_pdf}')
+    return corr_df
 
 
 def plot_average_confusion_matrices(accepted_results, output_file, model_names=None, labels=None):
